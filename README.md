@@ -23,7 +23,7 @@ PhysMaster 的原始研究框架、MCTS 搜索、多 Agent 协作及 LANDAU 知�
 | --- | --- | --- |
 | 研究框架 | Clarifier、Supervisor、Theoretician、Critic、Summarizer | 基于 PhysMaster 上游 |
 | 搜索与知识 | MCTS、分层记忆、LANDAU | 基于 PhysMaster 上游；知识数据需另行准备 |
-| 联网工具 | Tavily 搜索、检索去重与过滤、模型分工 | 沿用已有联网改进版 |
+| 联网工具 | Tavily 搜索、检索去重与过滤、模型分工 | 本扩展已实现 |
 | 网页工作台 | 创建任务、查看日志与最终总结 | 本交互扩展已实现 |
 | 动态条件 | 运行中提交条件、版本标记、生效回执 | 本交互扩展已实现，轮间生效 |
 | 任务控制 | 本轮结束后暂停、继续计算 | 本交互扩展已实现 |
