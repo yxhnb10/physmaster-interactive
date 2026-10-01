@@ -44,7 +44,8 @@ def atomic_json(path, value):
 
 
 class UpdateInbox:
-    def __init__(self, task_dir):
+    def __init__(self, task_dir, timing=None):
+        self.timing = timing
         self.root = Path(task_dir) / 'live_updates'
         self.session = uuid.uuid4().hex
         self.directory = self.root / self.session
@@ -85,13 +86,18 @@ class UpdateInbox:
 
     def checkpoint(self, round_index, revision):
         announced = False
+        previous = self.timing.current if self.timing else None
         while True:
             control = self.root / 'control.json'
             paused = json.loads(control.read_text(encoding='utf-8')).get('paused', False) if control.exists() else False
             if not paused:
+                if announced and self.timing:
+                    self.timing.change(previous)
                 self.progress('running', round_index, revision)
                 return
             if not announced:
+                if self.timing:
+                    self.timing.change('paused')
                 print('[LiveUpdate] Paused at round boundary', flush=True)
                 self.progress('paused', round_index, revision)
                 announced = True

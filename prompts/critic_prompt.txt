@@ -12,9 +12,10 @@ Based on the result above, perform a critical evaluation and provide:
 
 Calibration guidance:
 - Use `reward` in [0, 1].
-- `reward >= 0.85`: close to complete with strong correctness and verification.
-- `0.60 <= reward < 0.85`: direction is mostly right but needs revision.
-- `reward < 0.60`: major issues; prefer redraft unless salvageable with clear fixes.
+- `reward >= {accept_threshold}`: eligible for complete only if the current subtask requirements are actually fulfilled and verified.
+- `{redraft_threshold} <= reward < {accept_threshold}`: not eligible for complete; revise unless the approach requires redraft.
+- `reward < {redraft_threshold}`: major issues; redraft.
+- A high score alone is insufficient: preserve to_revise/to_redraft if unresolved issues remain.
 
 Output requirements:
 Return a JSON object with the following keys:

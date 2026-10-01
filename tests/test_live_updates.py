@@ -10,6 +10,7 @@ from types import SimpleNamespace
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from utils.live_updates import UpdateInbox, submit_update
+from utils.runtime_timing import timed_stage
 
 
 class LiveUpdateTests(unittest.TestCase):
@@ -39,13 +40,13 @@ class LiveUpdateTests(unittest.TestCase):
         # CUDA, network or vector database dependencies.
         source = ast.parse((ROOT / 'core/supervisor.py').read_text())
         cls = next(n for n in source.body if isinstance(n, ast.ClassDef))
-        method = next(n for n in cls.body if isinstance(n, ast.FunctionDef)
-                      and n.name == '_apply_pending_updates')
-        module = ast.Module(body=[method], type_ignores=[])
+        methods = [n for n in cls.body if isinstance(n, ast.FunctionDef)
+                   and n.name in ('_apply_pending_updates', '_replan_updates')]
+        module = ast.Module(body=methods, type_ignores=[])
         from utils.live_updates import atomic_json
         class FakeTree:
             def __init__(self, **kw): self.root = SimpleNamespace()
-        scope = dict(Path=Path, atomic_json=atomic_json, MCTSTree=FakeTree)
+        scope = dict(Path=Path, atomic_json=atomic_json, MCTSTree=FakeTree, timed_stage=timed_stage)
         exec(compile(module, '<actual supervisor method>', 'exec'), scope)
         apply = scope['_apply_pending_updates']
         with tempfile.TemporaryDirectory() as d:
@@ -62,6 +63,7 @@ class LiveUpdateTests(unittest.TestCase):
                 _build_subtasks=lambda: [{'id': 1}],
                 _get_prior_knowledge=lambda x: '')
             submit_update(d, 'new constraint')
+            h._replan_updates = lambda items: scope['_replan_updates'](h, items)
             self.assertTrue(apply(h))
             self.assertIs(contract, h.structured_problem)
             self.assertEqual(contract['live_updates'], ['new constraint'])
@@ -86,14 +88,14 @@ class LiveUpdateTests(unittest.TestCase):
         source = ast.parse((ROOT / 'core/supervisor.py').read_text())
         cls = next(n for n in source.body if isinstance(n, ast.ClassDef))
         methods = [n for n in cls.body if isinstance(n, ast.FunctionDef)
-                   and n.name in ('run', '_apply_pending_updates')]
+                   and n.name in ('run', '_apply_pending_updates', '_replan_updates')]
         from utils.live_updates import atomic_json
         class FakeTree:
             def __init__(self, **kw): self.root = SimpleNamespace()
             def get_all_nodes(self): return []
             def get_tree_stats(self): return {}
         scope = dict(Path=Path, atomic_json=atomic_json, MCTSTree=FakeTree,
-                     Dict=dict, Any=object)
+                     Dict=dict, Any=object, timed_stage=timed_stage)
         exec(compile(ast.Module(body=methods, type_ignores=[]), '<integration>', 'exec'), scope)
         with tempfile.TemporaryDirectory() as d:
             h = SimpleNamespace(update_inbox=UpdateInbox(d),
@@ -118,6 +120,7 @@ class LiveUpdateTests(unittest.TestCase):
             h._expand_and_simulate_nodes = expand
             h._control_checkpoint = lambda: None
             h._apply_pending_updates = lambda: scope['_apply_pending_updates'](h)
+            h._replan_updates = lambda items: scope['_replan_updates'](h, items)
             result = scope['run'](h)
             self.assertEqual(revisions_solved, [0, 1])
             self.assertEqual(result['contract_revision'], 1)

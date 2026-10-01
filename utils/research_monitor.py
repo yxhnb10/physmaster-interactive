@@ -27,6 +27,7 @@ class ResearchMonitor:
                 print(f'[Monitor] Could not publish round report: {exc}',flush=True)
 
     def start(self, round_index, revision, dispatch, parent_id):
+        self._round_started = time.monotonic()
         self.current=dict(round_index=round_index, round=round_index+1,
             revision=revision,state='running',started_at=time.time(),
             parent_id=parent_id,goal=dispatch.get('description',''),
@@ -60,6 +61,7 @@ class ResearchMonitor:
         for node in nodes:self.node(node,'finished')
         self.current['state']='finished'
         self.current['finished_at']=time.time()
+        self.current['duration_seconds']=max(0.0,time.monotonic()-self._round_started)
         self._save()
 
 

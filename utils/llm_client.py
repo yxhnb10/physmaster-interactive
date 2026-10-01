@@ -6,6 +6,7 @@ import time
 
 import yaml
 from openai import OpenAI
+from utils.runtime_timing import measure_operation
 
 
 def _load_llm_config(config_path: str | Path | None = None) -> Dict[str, Any]:
@@ -67,13 +68,14 @@ class LLMClient:
             f"prompt_chars={len(system_prompt) + len(user_prompt)}",
             flush=True,
         )
-        completion = self.client.chat.completions.create(
-            model=actual_model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-        )
+        with measure_operation('llm:' + (role or 'default')):
+            completion = self.client.chat.completions.create(
+                model=actual_model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+            )
         dt = time.time() - t0
         print(f"[LLM] (no tools) done dt={dt:.1f}s", flush=True)
         return (completion.choices[0].message.content or "").strip()
@@ -100,11 +102,12 @@ class LLMClient:
         for iteration in range(max_tool_calls):
             t_llm = time.time()
             print(f"[LLM] iter={iteration} model={model_name or self.model}", flush=True)
-            completion = self.client.chat.completions.create(
-                model=actual_model,
-                messages=messages,
-                tools=tools if tools else None,
-            )
+            with measure_operation('llm:' + (role or 'default')):
+                completion = self.client.chat.completions.create(
+                    model=actual_model,
+                    messages=messages,
+                    tools=tools if tools else None,
+                )
             llm_dt = time.time() - t_llm
             msg = completion.choices[0].message
             n_tools = len(msg.tool_calls or [])
@@ -147,7 +150,8 @@ class LLMClient:
                     if fn is None:
                         result = f"[tool:{tc.function.name}] not implemented"
                     else:
-                        result = fn(**call_args) if isinstance(call_args, dict) else fn(call_args)
+                        with measure_operation('tool:' + tc.function.name):
+                            result = fn(**call_args) if isinstance(call_args, dict) else fn(call_args)
                 except Exception:
                     result = traceback.format_exc()
                 print(f"[LLM]   tool={tc.function.name} dt={time.time()-t_tool:.1f}s", flush=True)

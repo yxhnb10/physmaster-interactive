@@ -12,6 +12,7 @@ from core.clarifier import Clarifier
 from core.visualization import generate_vis
 from utils.skill_loader import resolve_skill_roots
 from utils.live_updates import UpdateInbox
+from utils.runtime_timing import RunTimer
 
 
 def load_config(path: str = "config.yaml") -> Dict[str, Any]:
@@ -73,10 +74,29 @@ def clarify_query(query_path: str, clr_cfg, workflow_enabled: bool = True, confi
 
 
 def main(config_path: str = "config.yaml"):
+    cfg = load_config(config_path)
+    pipeline = cfg.get('pipeline', {})
+    task_dir = Path(pipeline.get('output_path', 'outputs')) / Path(
+        pipeline.get('query_file', 'instructions/test.txt')).stem
+    timing = RunTimer(task_dir)
+    old_root = os.environ.get('PHY_TIMING_ROOT')
+    os.environ['PHY_TIMING_ROOT'] = str(task_dir.resolve())
+    success = False
+    try:
+        _run_pipeline(config_path, cfg, timing)
+        success = True
+    finally:
+        timing.finish(success)
+        if old_root is None:
+            os.environ.pop('PHY_TIMING_ROOT', None)
+        else:
+            os.environ['PHY_TIMING_ROOT'] = old_root
+
+
+def _run_pipeline(config_path, cfg, timing):
     """Orchestrate the full PhysMaster pipeline from config loading
     through to summary generation and optional visualization."""
     print(f"config file path: {config_path}")
-    cfg = load_config(config_path)
 
     # ---- Extract config sections ----
     pipeline_cfg = cfg.get("pipeline", {})
@@ -110,9 +130,11 @@ def main(config_path: str = "config.yaml"):
     clarifier_cfg["workflow_dir"] = str(workflow_root)
 
     # ---- Stage 1: Clarify the query into a structured contract ----
+    timing.change('clarifying')
     structured_problem, task_dir, task_name = clarify_query(
         query_path, clarifier_cfg, workflow_enabled=workflow_enabled, config_path=config_path
     )
+    timing.change('initializing')
 
     # ---- Log enabled features ----
     if library_enabled:
@@ -151,6 +173,7 @@ def main(config_path: str = "config.yaml"):
         landau_prior_enabled=prior_enabled,
         config_path=config_path,
         debug_logging=bool(pipeline_cfg.get("debug_logging", False)),
+        timing=timing,
     )
 
     # Optional per-run inbox. A second terminal can submit updates at any time.
@@ -170,11 +193,12 @@ def main(config_path: str = "config.yaml"):
                                  config_path=config_path).run(text)
             contract["instruction_filename"] = instruction_filename
             return contract
-        inbox = UpdateInbox(task_dir)
+        inbox = UpdateInbox(task_dir, timing=timing)
         supervisor.update_inbox = inbox
         supervisor.rebuild_contract = rebuild_contract
         print(f"[LiveUpdate] Inbox ready for task: {task_dir}")
     try:
+        timing.change('orchestration')
         mcts_result = supervisor.run()
     finally:
         if inbox is not None:
@@ -185,6 +209,7 @@ def main(config_path: str = "config.yaml"):
     # ---- Stage 3 (optional): Distill L3 wisdom into the prior index ----
     # L3 Wisdom accumulation
     if wisdom_save_enabled and prior_enabled:
+        timing.change('wisdom')
         try:
             from LANDAU.prior.wisdom_store import WisdomStore
             ws = WisdomStore(prior_root, config_path=config_path)
@@ -200,6 +225,7 @@ def main(config_path: str = "config.yaml"):
         print("[Wisdom] Skipped: prior_enabled is false")
 
     # ---- Stage 4: Generate markdown summary from the best trajectory ----
+    timing.change('summary')
     summarizer = TrajectorySummarizer(prompts_path="prompts/",config_path=config_path)
     summary_md_path = task_dir / "summary.md"
     contract_for_summary = json.dumps(structured_problem, ensure_ascii=False, indent=2)
@@ -213,6 +239,7 @@ def main(config_path: str = "config.yaml"):
 
     # ---- Stage 5 (optional): Generate interactive HTML tree visualization ----
     if vis_cfg.get("enabled",False):
+        timing.change('visualization')
         vis_path = task_dir / "visualization.html"
         generate_vis(
             vis_path,
