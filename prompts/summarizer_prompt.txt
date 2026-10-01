@@ -1,0 +1,11 @@
+Full task contract:
+{task_description}
+
+Best trajectory JSON:
+{trajectory}
+
+Write `summary.md` content in Markdown based on the best trajectory.
+For any expected output in the contract, you should either:
+- provide the answer (as for files, provide brief introduction and its path) clearly in `## Final Outcome`, and make sure no given answer is ignored.
+- or mark it as missing/insufficient ones in `## Open Issues`.
+

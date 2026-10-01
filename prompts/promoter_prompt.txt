@@ -1,0 +1,16 @@
+Current Node Context:
+{node_context}
+
+Your task:
+Analyze the provided execution trajectory and the critic's evaluation to promote this node's experience to Refined Knowledge.
+
+Promoter Guidance:
+- If reward > 0.8: Focus on "Knowledge Crystallization". Extract the successful physical model, the converged parameters, and the validated derivation logic.
+- If 0.5 < reward <= 0.8: Focus on "Correction Insight". Identify the specific gap between the draft and the physical truth.
+- If reward <= 0.5: Focus on "Failure Attribution". Record the specific physical constraint or numerical instability that led to this dead end to prevent future nodes from re-entering this space.
+
+Operational Constraints:
+- Strip away all code traceback noise and redundant algebraic iterations.
+- Preserve all contract-specified physical constants and units mentioned in the result.
+
+Generate the Refined Knowledge summary now.

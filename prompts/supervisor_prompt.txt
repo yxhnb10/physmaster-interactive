@@ -1,0 +1,19 @@
+The structured contract:
+{structured}
+
+Node info:
+{node}
+
+Your task:
+Generate the next supervisor dispatch JSON for this node.
+
+Supervisor guidance:
+- If current node decision is `complete`, move to the next contract subtask when available.
+- If current node decision is `to_revise`, keep the same subtask and improve rigor/validation.
+- If current node decision is `to_redraft`, keep the same subtask but propose a different approach.
+- Keep `description` specific: include target outputs, checks, and constraints.
+- Preserve user-provided formulas/method hints and pass them down explicitly when relevant.
+- View contract-specified methods (physical model, formulas, data format and loading methods, etc.) requirements as mandatory in `description`.
+- Do not omit required method details.
+
+Return ONLY the JSON object required by system instructions.

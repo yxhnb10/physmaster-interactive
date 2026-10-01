@@ -1,0 +1,16 @@
+User query:
+{user_query}
+
+Schema to follow strictly (JSON):
+{schema_json}
+
+Additional runtime constraints:
+- The number of items in "related_knowledge" must be <= {max_keys}.
+- Build "constraints" by selecting relevant items from: symmetry, conservation_law, scales, boundary_condition, initial_condition, and other mathematical constraints.
+- Keep only constraints that are truly relevant to this task.
+- Do not include planning/workflow design as a subtask.
+- `task_description` and relevant `subtasks[*].description` must explicitly retain user-specified methods (e.g., formulas/models, `gvar.load`, key patterns, shapes, path rules, output checks).
+- Before output, verify no required method detail was dropped.
+- Do not output schema/template metadata keys like `$schema`, `$id`, `properties`, `required`, or `definitions`.
+
+Now output ONLY the JSON object that adheres to the schema and constraints above.

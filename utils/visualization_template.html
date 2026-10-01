@@ -1,0 +1,775 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PhysMaster MCTS Visualization</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js" crossorigin="anonymous"></script>
+  <style>
+    :root {
+      --bg: #f6f6f6;
+      --panel: #ffffff;
+      --panel-2: #fafafa;
+      --line: #d4d4d8;
+      --text: #111111;
+      --muted: #52525b;
+      --accent: #1f2937;
+      --node: #1f2937;
+      --node-best: #111111;
+      --node-root: #9ca3af;
+      --edge: #4b5563;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: radial-gradient(1200px 800px at 20% -20%, #ffffff 0%, var(--bg) 65%);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    #app {
+      display: grid;
+      grid-template-columns: 58% 42%;
+      height: 100vh;
+    }
+
+    #left {
+      position: relative;
+      border-right: 1px solid var(--line);
+      background: #ffffff;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    #left-scroll {
+      position: absolute;
+      inset: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+      overscroll-behavior: contain;
+      padding-top: 44px;
+    }
+
+    #left-scroll canvas {
+      display: block;
+      width: 100% !important;
+      height: auto !important;
+    }
+
+    #left-title {
+      position: absolute;
+      top: 10px;
+      left: 12px;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      padding: 6px 8px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.85);
+      backdrop-filter: blur(4px);
+    }
+
+    #right {
+      display: flex;
+      flex-direction: column;
+      background: linear-gradient(180deg, #fafafa, #f5f5f5);
+      min-width: 0;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .modebar {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      border-bottom: 1px solid var(--line);
+      background: #f0f0f0;
+      flex: 0 0 auto;
+    }
+
+    .mode-btn {
+      padding: 11px 10px;
+      color: var(--muted);
+      background: transparent;
+      border: none;
+      border-right: 1px solid var(--line);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: background .2s ease, color .2s ease, transform .12s ease;
+    }
+
+    .mode-btn:last-child { border-right: none; }
+
+    .mode-btn.active {
+      color: var(--text);
+      background: #ffffff;
+      box-shadow: inset 0 -2px 0 #111111;
+    }
+    .mode-btn:active { transform: scale(0.98); }
+
+    #mode-area {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      flex: 1 1 auto;
+      overflow: hidden;
+    }
+
+    .mode-panel {
+      display: none;
+      flex-direction: column;
+      min-height: 0;
+      height: 100%;
+      overflow: hidden;
+      background: #f7f7f8;
+    }
+
+    .mode-panel.active {
+      display: flex;
+      animation: fadeIn .2s ease;
+    }
+
+    .panel-scroll {
+      overflow-x: hidden;
+      overflow-y: auto;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-height: 0;
+      height: auto;
+      overscroll-behavior: contain;
+      scrollbar-gutter: stable;
+    }
+
+    #mode-node .panel-scroll {
+      flex: 0 0 auto;
+      overflow: visible;
+      padding-bottom: 8px;
+    }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .mini-card {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: 10px;
+      padding: 10px;
+    }
+
+    .mini-label {
+      margin: 0 0 6px 0;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .06em;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+
+    .mini-value {
+      font-size: 13px;
+      line-height: 1.4;
+      color: var(--text);
+      word-break: break-word;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: 10px;
+      padding: 10px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .card h4 {
+      margin: 0 0 6px 0;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .06em;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+
+    .tabbar {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      border-bottom: 1px solid var(--line);
+      background: #f0f0f0;
+      flex: 0 0 auto;
+    }
+
+    .tab-btn {
+      padding: 11px 10px;
+      color: var(--muted);
+      background: transparent;
+      border: none;
+      border-right: 1px solid var(--line);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: background .2s ease, color .2s ease, transform .12s ease;
+    }
+
+    .tab-btn:last-child { border-right: none; }
+
+    .tab-btn.active {
+      color: var(--text);
+      background: #ffffff;
+      box-shadow: inset 0 -2px 0 #111111;
+    }
+    .tab-btn:active { transform: scale(0.98); }
+
+    #detail-area {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      flex: 1 1 auto;
+      overflow: hidden;
+    }
+
+    .tab-panel {
+      display: none;
+      overflow-x: hidden;
+      overflow-y: auto;
+      padding: 12px;
+      gap: 10px;
+      flex-direction: column;
+      min-height: 0;
+      flex: 1 1 auto;
+      overscroll-behavior: contain;
+      scrollbar-gutter: stable;
+      background: #f7f7f8;
+      height: 100%;
+    }
+
+    .tab-panel.active {
+      display: flex;
+      animation: fadeIn .2s ease;
+    }
+
+    .tab-panel .card {
+      flex: 0 0 auto;
+    }
+
+    pre {
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .meta-line {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="left">
+      <div id="left-title">PhysMaster · Visualization</div>
+      <div id="left-scroll"></div>
+    </div>
+
+    <div id="right">
+      <div class="modebar">
+        <button class="mode-btn active" data-mode="mode-node">Node Info</button>
+        <button class="mode-btn" data-mode="mode-overview">Overview</button>
+      </div>
+
+      <div id="mode-area">
+        <div id="mode-node" class="mode-panel active">
+          <div class="panel-scroll">
+            <div class="meta-grid">
+              <div class="mini-card"><div class="mini-label">ID</div><div id="meta_id" class="mini-value"></div></div>
+              <div class="mini-card"><div class="mini-label">Depth</div><div id="meta_depth" class="mini-value"></div></div>
+              <div class="mini-card"><div class="mini-label">Subtask ID</div><div id="meta_subtask_id" class="mini-value"></div></div>
+              <div class="mini-card"><div class="mini-label">Type</div><div id="meta_type" class="mini-value"></div></div>
+              <div class="mini-card"><div class="mini-label">Reward</div><div id="meta_reward" class="mini-value"></div></div>
+              <div class="mini-card"><div class="mini-label">Decision</div><div id="meta_decision" class="mini-value"></div></div>
+            </div>
+          </div>
+
+          <div id="detail-area">
+            <div class="tabbar">
+              <button class="tab-btn active" data-tab="tab-supervisor">Supervisor</button>
+              <button class="tab-btn" data-tab="tab-theoretician">Theoretician</button>
+              <button class="tab-btn" data-tab="tab-critic">Critic</button>
+            </div>
+
+            <div id="tab-supervisor" class="tab-panel active">
+              <div class="card"><h4>Type</h4><div id="sup_type"></div></div>
+              <div class="card"><h4>Subtask</h4><pre id="sup_subtask"></pre></div>
+              <div class="card"><h4>Description</h4><pre id="sup_description"></pre></div>
+              <div class="card"><h4>Raw Supervisor Feedback</h4><pre id="sup_raw"></pre></div>
+            </div>
+
+            <div id="tab-theoretician" class="tab-panel">
+              <div class="card"><h4>Analysis</h4><pre id="the_analysis"></pre></div>
+              <div class="card"><h4>Core Results</h4><pre id="the_core"></pre></div>
+              <div class="card"><h4>Code</h4><pre id="the_code"></pre></div>
+              <div class="card"><h4>Files</h4><pre id="the_files"></pre></div>
+              <div class="card"><h4>Raw Theoretician Output</h4><pre id="the_raw"></pre></div>
+            </div>
+
+            <div id="tab-critic" class="tab-panel">
+              <div class="card"><h4>Decision</h4><div id="cri_decision"></div></div>
+              <div class="card"><h4>Reward</h4><div id="cri_reward"></div></div>
+              <div class="card"><h4>Analysis</h4><pre id="cri_opinion"></pre></div>
+              <div class="card"><h4>Summary</h4><pre id="cri_summary"></pre></div>
+              <div class="card"><h4>Raw Critic Feedback</h4><pre id="cri_raw"></pre></div>
+            </div>
+          </div>
+        </div>
+
+        <div id="mode-overview" class="mode-panel">
+          <div class="panel-scroll">
+            <div class="card"><h4>Task</h4><pre id="overview_task"></pre></div>
+            <div class="card"><h4>Subtasks</h4><pre id="overview_subtasks"></pre></div>
+            <div class="card"><h4>Summary</h4><pre id="overview_summary"></pre></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- __DATA_INJECT__ -->
+
+  <script>
+    const MOCK_DATA = {
+      task_description: "Demo: Estimate free-fall time and impact velocity.",
+      root_id: 0,
+      nodes: [
+        {
+          node_id: 0,
+          parent_id: null,
+          children: [1, 2],
+          depth: 0,
+          node_type: "draft",
+          subtask: "Problem decomposition root",
+          description: "Root of decomposition",
+          reward: 0,
+          visits: 4,
+          status: "completed_expended",
+          memory: "",
+          theoretician_output: "",
+          supervisor_dispatch: {},
+          supervisor_feedback: {},
+          critic_feedback: {}
+        },
+        {
+          node_id: 1,
+          parent_id: 0,
+          children: [],
+          depth: 1,
+          node_type: "draft",
+          subtask: "Derive t = sqrt(2h/g) and compute numeric value.",
+          description: "Derive free-fall time and compute the numeric result for given h and g.",
+          reward: 0.82,
+          visits: 2,
+          status: "completed_closed",
+          memory: "type=draft | subtask=Derive t | verdict=partial | reward=0.82",
+          theoretician_output: '{"analysis":"Used constant-acceleration kinematics.","core_results":{"t_s":1.01},"code":"import math","files":["calc.txt"]}',
+          supervisor_dispatch: {"node_type":"draft","subtask":"derive time","description":"derive and compute t"},
+          supervisor_feedback: {"node_type":"draft","subtask":"derive time","description":"derive and compute t"},
+          critic_feedback: {"decision":"to_revise","reward":0.82,"summary":"Time is correct, add velocity."}
+        },
+        {
+          node_id: 2,
+          parent_id: 0,
+          children: [],
+          depth: 1,
+          node_type: "revise",
+          subtask: "Compute both time and impact velocity with consistency checks.",
+          description: "Compute time and velocity and verify with v=gt and energy consistency.",
+          reward: 0.94,
+          visits: 2,
+          status: "completed_closed",
+          memory: "type=revise | subtask=Compute both | verdict=accept | reward=0.94",
+          theoretician_output: '{"analysis":"Computed t and v and checked v≈gt.","core_results":{"t_s":1.01,"v_mps":9.90},"code":"# python code","files":["result.csv"]}',
+          supervisor_dispatch: {"node_type":"revise","subtask":"compute time+velocity","description":"compute both and check consistency"},
+          supervisor_feedback: {"node_type":"revise","subtask":"compute time+velocity","description":"compute both and check consistency"},
+          critic_feedback: {"decision":"complete","verdict":"accept","reward":0.94,"summary":"Complete and consistent.","opinion":"Good numerical consistency."}
+        }
+      ],
+      edges: [[0,1],[0,2]],
+      subtasks: [
+        {
+          id: 1,
+          subtask_type: "reasoning",
+          input: "Height h, gravity g",
+          expected_output: "t and v with consistency checks",
+          description: "Derive free-fall time and impact speed."
+        }
+      ],
+      summary: "The best path derives a consistent solution with validated equations and checks."
+    };
+
+    const DATA = Object.assign(
+      {},
+      MOCK_DATA,
+      window.__PHY_MCTS_DATA__ || {},
+      window.__PHY_MCTS_EXTRA__ || {},
+    );
+    if (!Array.isArray(DATA.subtasks)) {
+      const contractSubtasks =
+        (DATA.contract && (DATA.contract.subtasks || DATA.contract.sub_tasks))
+        || DATA.sub_tasks
+        || [];
+      DATA.subtasks = Array.isArray(contractSubtasks) ? contractSubtasks : [];
+    }
+    if (DATA.summary == null) DATA.summary = "";
+    const nodeMap = new Map((DATA.nodes || []).map(n => [n.node_id, n]));
+    let selectedNodeId = DATA.root_id;
+    const TREE_BG = "#ffffff";
+    const NODE_SIZE = 62;
+    // Fixed vertical spacing (pixels) between consecutive depth levels.
+    const LEVEL_STEP_PX = 110;
+    const NODE_FILL = "#111111";
+    const NODE_TEXT = "#ffffff";
+    const EDGE_COLOR = "#111111";
+    const SELECTED_FILL = "#ffffff";
+    const SELECTED_TEXT = "#111111";
+    const SELECTED_STROKE = "#111111";
+
+    function parseMaybeJson(raw) {
+      if (raw == null) return null;
+      if (typeof raw === "object") return raw;
+      const text = String(raw).trim();
+      if (!text) return null;
+      try { return JSON.parse(text); } catch (_) {}
+      const m = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (m) {
+        try { return JSON.parse(m[1]); } catch (_) {}
+      }
+      const l = text.indexOf("{");
+      const r = text.lastIndexOf("}");
+      if (l >= 0 && r > l) {
+        try { return JSON.parse(text.slice(l, r + 1)); } catch (_) {}
+      }
+      return null;
+    }
+
+    function asText(v) {
+      if (v == null) return "";
+      if (typeof v === "string") return v;
+      try { return JSON.stringify(v, null, 2); } catch (_) { return String(v); }
+    }
+
+    function buildTreeStructData() {
+      const nodes = DATA.nodes || [];
+      const idToIdx = new Map(nodes.map((n, i) => [n.node_id, i]));
+      const layout = nodes.map((node) => {
+        if (typeof node.viz_x === "number" && typeof node.viz_y === "number") {
+          return [node.viz_x, node.viz_y];
+        }
+        const depth = Number(node.depth || 0);
+        const sameDepth = nodes.filter(n => Number(n.depth || 0) === depth);
+        const idx = Math.max(0, sameDepth.findIndex(n => n.node_id === node.node_id));
+        return [((idx + 1) / (sameDepth.length + 1)), (0.12 + depth * 0.16)];
+      });
+      const edges = (DATA.edges || [])
+        .map(([a, b]) => [idToIdx.get(a), idToIdx.get(b)])
+        .filter(([a, b]) => Number.isInteger(a) && Number.isInteger(b));
+      return {
+        nodeIds: nodes.map(n => n.node_id),
+        layout,
+        edges,
+      };
+    }
+
+    function initMctsTree() {
+      const mount = document.getElementById("left-scroll");
+      const tree = buildTreeStructData();
+      let nodes = [];
+      let edges = [];
+      let pulseUntil = 0;
+      let contentHeight = 0;
+
+      const selectedIndex = Math.max(0, tree.nodeIds.findIndex(id => id === selectedNodeId));
+      if (!selectedNodeId && tree.nodeIds.length > 0) selectedNodeId = tree.nodeIds[0];
+
+      const sketch = (p) => {
+        function canvasDims() {
+          return [Math.max(120, mount.clientWidth), Math.max(120, mount.clientHeight)];
+        }
+
+        class Node {
+          constructor(x, y, treeInd) {
+            this.x = x;
+            this.y = y;
+            this.treeInd = treeInd;
+            this.size = NODE_SIZE;
+            this.xT = x;
+            this.yT = y - this.size / 2;
+            this.xB = x;
+            this.yB = y + this.size / 2;
+            this.selected = false;
+            nodes.push(this);
+          }
+
+          child(node) {
+            const edge = new Edge(this, node);
+            edges.push(edge);
+            return node;
+          }
+
+          render() {
+            const id = tree.nodeIds[this.treeInd];
+            const isSelected = id === selectedNodeId;
+            const [mx, my] = localMouse();
+            const isHover = p.dist(mx, my, this.x, this.y) <= this.size / 2;
+            const renderSize = isHover ? this.size * 1.08 : this.size;
+            if (isSelected) {
+              p.fill(SELECTED_FILL);
+              p.stroke(SELECTED_STROKE);
+              p.strokeWeight(4);
+            } else {
+              p.fill(NODE_FILL);
+              p.stroke(EDGE_COLOR);
+              p.strokeWeight(isHover ? 3 : 2);
+            }
+            if (isHover && !isSelected) {
+              p.drawingContext.shadowBlur = 14;
+              p.drawingContext.shadowColor = "rgba(0,0,0,0.35)";
+            } else {
+              p.drawingContext.shadowBlur = 0;
+            }
+            p.circle(this.x, this.y, renderSize);
+            p.drawingContext.shadowBlur = 0;
+
+            p.noStroke();
+            p.fill(isSelected ? SELECTED_TEXT : NODE_TEXT);
+            p.textAlign(p.CENTER, p.CENTER);
+            p.textSize(24);
+            const label = String(Number(id));
+            p.text(label, this.x, this.y + 1);
+          }
+        }
+
+        class Edge {
+          constructor(nodeT, nodeB) {
+            this.nodeT = nodeT;
+            this.nodeB = nodeB;
+          }
+
+          render() {
+            p.strokeWeight(3);
+            p.stroke(EDGE_COLOR);
+            p.noFill();
+            p.bezier(
+              this.nodeT.xB,
+              this.nodeT.yB,
+              this.nodeT.xB,
+              (this.nodeT.yB + this.nodeB.yT) / 2,
+              this.nodeB.xT,
+              (this.nodeT.yB + this.nodeB.yT) / 2,
+              this.nodeB.xT,
+              this.nodeB.yT,
+            );
+          }
+        }
+
+        function buildNodesOnce() {
+          if (nodes.length > 0) return;
+          const xPad = 80;
+          const yPad = 70;
+          const maxDepth = Math.max(
+            0,
+            ...tree.nodeIds.map((id) => Number((nodeMap.get(id) || {}).depth || 0)),
+          );
+          contentHeight = Math.max(
+            p.height,
+            Math.ceil(yPad * 2 + maxDepth * LEVEL_STEP_PX + NODE_SIZE + 20),
+          );
+          p.resizeCanvas(p.width, contentHeight);
+
+          const plotW = Math.max(1, p.width - xPad * 2);
+
+          tree.layout.forEach((lay, index) => {
+            const nodeId = tree.nodeIds[index];
+            const depth = Number((nodeMap.get(nodeId) || {}).depth || 0);
+            new Node(
+              xPad + plotW * lay[0],
+              yPad + depth * LEVEL_STEP_PX,
+              index,
+            );
+          });
+          tree.edges.forEach(([a, b]) => {
+            if (nodes[a] && nodes[b]) nodes[a].child(nodes[b]);
+          });
+          if (nodes[selectedIndex]) nodes[selectedIndex].selected = true;
+        }
+
+        function localMouse() {
+          return [p.mouseX, p.mouseY];
+        }
+
+        function pickNode(mx, my) {
+          for (const n of nodes) {
+            if (p.dist(mx, my, n.x, n.y) <= n.size / 1.45) return n;
+          }
+          return null;
+        }
+
+        p.setup = () => {
+          const [w, hViewport] = canvasDims();
+          const c = p.createCanvas(w, hViewport);
+          c.parent(mount);
+          p.textFont("Times New Roman");
+        };
+
+        p.windowResized = () => {
+          const [w, hViewport] = canvasDims();
+          p.resizeCanvas(w, hViewport);
+          nodes = [];
+          edges = [];
+        };
+
+        p.mouseReleased = () => {
+          const [mx, my] = localMouse();
+          const hit = pickNode(mx, my);
+          if (!hit) return;
+          selectedNodeId = tree.nodeIds[hit.treeInd];
+          pulseUntil = p.millis() + 360;
+          renderRight(selectedNodeId);
+
+          const selectedNode = nodes[hit.treeInd];
+          if (selectedNode) {
+            const top = mount.scrollTop;
+            const bottom = top + mount.clientHeight;
+            const targetY = selectedNode.y;
+            const pad = 80;
+            if (targetY < top + pad) mount.scrollTop = Math.max(0, targetY - pad);
+            if (targetY > bottom - pad) mount.scrollTop = Math.max(0, targetY - mount.clientHeight + pad);
+          }
+        };
+
+        p.draw = () => {
+          p.cursor(p.ARROW);
+          p.frameRate(45);
+          buildNodesOnce();
+          p.background(TREE_BG);
+
+          edges.forEach((e) => e.render());
+          nodes.forEach((n) => n.render());
+
+          if (pulseUntil > p.millis()) {
+            const age = 1 - (pulseUntil - p.millis()) / 360;
+            const idx = tree.nodeIds.findIndex(id => id === selectedNodeId);
+            const s = nodes[idx];
+            if (s) {
+              p.noFill();
+              p.stroke(0, Math.max(0, 180 * (1 - age)));
+              p.strokeWeight(3);
+              p.circle(s.x, s.y, NODE_SIZE * (1.1 + age * 0.9));
+            }
+          }
+        };
+      };
+
+      new p5(sketch);
+    }
+
+    function renderRight(nodeId) {
+      const node = nodeMap.get(nodeId);
+      if (!node) return;
+      const cri = parseMaybeJson(node.critic_feedback) || node.critic_feedback || {};
+      const subtaskObj = parseMaybeJson(node.subtask) || node.subtask || {};
+      let subtaskId = "";
+      if (subtaskObj && typeof subtaskObj === "object" && !Array.isArray(subtaskObj) && subtaskObj.id != null && subtaskObj.id !== "") {
+        subtaskId = String(subtaskObj.id);
+      }
+
+      document.getElementById("meta_id").textContent = String(Number(node.node_id));
+      document.getElementById("meta_depth").textContent = asText(node.depth ?? "");
+      document.getElementById("meta_subtask_id").textContent = subtaskId;
+      document.getElementById("meta_reward").textContent = asText(node.reward ?? "");
+      document.getElementById("meta_type").textContent = node.node_type || "";
+      document.getElementById("meta_decision").textContent = cri.decision || cri.verdict || "";
+
+      const supDispatch = parseMaybeJson(node.supervisor_dispatch) || node.supervisor_dispatch || {};
+      document.getElementById("sup_type").textContent = supDispatch.node_type || "";
+      document.getElementById("sup_subtask").textContent = asText(supDispatch.subtask || "");
+      document.getElementById("sup_description").textContent = asText(supDispatch.description || "");
+      document.getElementById("sup_raw").textContent = asText(supDispatch);
+
+      const theoRaw = node.theoretician_output || "";
+      const theo = parseMaybeJson(theoRaw) || {};
+      document.getElementById("the_analysis").textContent = asText(theo.analysis || "");
+      document.getElementById("the_core").textContent = asText(theo.core_results || theo.numerical_results || "");
+      document.getElementById("the_code").textContent = asText(theo.code || "");
+      document.getElementById("the_files").textContent = asText(theo.files || []);
+      document.getElementById("the_raw").textContent = asText(theoRaw);
+
+      document.getElementById("cri_decision").textContent = cri.decision || cri.verdict || "";
+      document.getElementById("cri_reward").textContent = asText(cri.reward ?? "");
+      document.getElementById("cri_summary").textContent = asText(cri.summary || "");
+      document.getElementById("cri_opinion").textContent = asText(cri.opinion || cri.analysis || "");
+      document.getElementById("cri_raw").textContent = asText(cri);
+    }
+
+    function renderOverview() {
+      document.getElementById("overview_task").textContent = asText(DATA.task_description || "");
+      document.getElementById("overview_subtasks").textContent = asText(DATA.subtasks || []);
+      document.getElementById("overview_summary").textContent = asText(DATA.summary || "");
+    }
+
+    function initModeTabs() {
+      const btns = Array.from(document.querySelectorAll(".mode-btn"));
+      const panels = Array.from(document.querySelectorAll(".mode-panel"));
+      btns.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          btns.forEach((b) => b.classList.remove("active"));
+          btn.classList.add("active");
+          const target = btn.getAttribute("data-mode");
+          panels.forEach((p) => p.classList.toggle("active", p.id === target));
+        });
+      });
+    }
+
+    function initDetailTabs() {
+      const btns = Array.from(document.querySelectorAll(".tab-btn"));
+      const panels = Array.from(document.querySelectorAll(".tab-panel"));
+      btns.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          btns.forEach((b) => b.classList.remove("active"));
+          btn.classList.add("active");
+          const target = btn.getAttribute("data-tab");
+          panels.forEach((p) => p.classList.toggle("active", p.id === target));
+        });
+      });
+    }
+
+    initModeTabs();
+    initDetailTabs();
+    initMctsTree();
+    renderOverview();
+    renderRight(selectedNodeId || (DATA.nodes[0] && DATA.nodes[0].node_id));
+  </script>
+</body>
+</html>

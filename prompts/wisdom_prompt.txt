@@ -1,0 +1,18 @@
+## Task Description
+{task_description}
+
+## Best Trajectory (Knowledge Summaries)
+{trajectory_knowledge}
+
+## Completed Subtasks and Results
+{completed_subtasks}
+
+---
+
+Distill the above completed task into reusable **task-level wisdom**. Focus on:
+1. What high-level strategy made this solution work?
+2. Which methods/tools were most effective and why?
+3. What pitfalls were encountered, and how were they avoided or resolved?
+4. What reusable formulas, approximations, or domain insights emerged?
+
+Generate the wisdom summary now.

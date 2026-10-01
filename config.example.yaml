@@ -1,0 +1,60 @@
+llm:
+  base_url: https://api.deepseek.com/
+  api_key: YOUR_API_KEY
+  model: deepseek-v4-pro
+  timeout: 120
+  max_retries: 2
+  model_overrides:
+    supervisor: deepseek-flash
+    draft: deepseek-flash
+    revise: deepseek-v4-pro
+    critic: deepseek-flash
+    promoter: deepseek-flash
+    clarifier: deepseek-flash
+    retrieval_critic: deepseek-flash
+    summarizer: deepseek-flash
+    critic_strong: deepseek-v4-pro
+    supervisor_strong: deepseek-v4-pro
+    promoter_strong: deepseek-v4-pro
+pipeline:
+  query_file: instructions/query.txt
+  output_path: outputs
+  parallel_processes: 2
+  max_rounds: 6
+  debug_logging: true
+mcts:
+  draft_expansion: 2
+  revise_expansion: 2
+  exploration_constant: 1.2
+  active_beam_width: 2
+clarifier:
+  max_key_concpets: 5
+skills:
+  enabled: true
+  roots:
+  - LANDAU/skills
+landau:
+  library_enabled: true
+  library: LANDAU/library
+  workflow_enabled: true
+  workflow: LANDAU/workflow
+  prior_enabled: false
+  wisdom_save_enabled: true
+visualization:
+  enabled: true
+tools:
+  web_enabled: true
+  codata_enabled: false
+  search_provider: tavily
+  api_key_env: TAVILY_API_KEY
+  timeout_s: 10
+  max_results: 3
+  cache_ttl_hours: 168
+  cache_path: .cache/web.sqlite
+  allow_domains:
+  - arxiv.org
+  - nist.gov
+  - physics.stackexchange.com
+  retrieval_critic:
+    enabled: true
+    threshold: 0.5

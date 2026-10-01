@@ -1,0 +1,44 @@
+# ============================================================
+#  PhysMaster — Python dependencies
+# ============================================================
+#
+#  Organized by tier:
+#    Core          always required
+#    Library       arXiv paper search (no extra deps, uses stdlib urllib)
+#    Prior         FAISS-backed RAG knowledge base (optional)
+#    Prior Build   offline index building tool (optional)
+#    Feishu        chatbot deployment (optional)
+#    Runtime       not imported by PhysMaster itself, but used
+#                  by LLM-generated code in subprocess
+# ============================================================
+
+# ── Core pipeline ────────────────────────────────────────────
+openai>=1.40.0
+PyYAML>=6.0
+
+# ── Prior retrieval (LANDAU/prior — optional) ────────────────
+#    Set landau.prior_enabled: false in config to skip these.
+#    sentence-transformers pulls in torch automatically.
+faiss-cpu>=1.8.0
+sentence-transformers>=3.0.0
+numpy>=1.26.0
+
+# ── Prior store building (offline, optional) ─────────────────
+#    Only needed when running: python LANDAU/prior/prior_store.py
+tqdm>=4.60.0
+nltk>=3.8
+
+# ── Feishu bot (optional, separate deployment) ───────────────
+#    Only needed when running: python feishu/bot.py
+lark-oapi>=1.2.0
+
+# ── Runtime: LLM-generated code in subprocess ────────────────
+#    The Theoretician agent writes Python scripts that are
+#    executed via subprocess. These packages must be installed
+#    so those scripts can import them, but PhysMaster's own
+#    source code never imports them directly.
+scipy>=1.11.0
+sympy>=1.12
+matplotlib>=3.8.0
+mpmath>=1.3.0
+pandas>=2.1.0

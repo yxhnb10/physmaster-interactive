@@ -1,0 +1,12 @@
+{
+  "speed_of_light": {"value": 299792458, "unit": "m/s", "uncertainty": 0},
+  "planck_constant": {"value": 6.62607015e-34, "unit": "J*s", "uncertainty": 0},
+  "reduced_planck_constant": {"value": 1.054571817e-34, "unit": "J*s", "uncertainty": 0},
+  "gravitational_constant": {"value": 6.67430e-11, "unit": "m^3/(kg*s^2)", "uncertainty": 1.5e-15},
+  "electron_mass": {"value": 9.1093837015e-31, "unit": "kg", "uncertainty": 2.8e-40},
+  "proton_mass": {"value": 1.67262192369e-27, "unit": "kg", "uncertainty": 5.1e-37},
+  "elementary_charge": {"value": 1.602176634e-19, "unit": "C", "uncertainty": 0},
+  "boltzmann_constant": {"value": 1.380649e-23, "unit": "J/K", "uncertainty": 0},
+  "avogadro_constant": {"value": 6.02214076e23, "unit": "1/mol", "uncertainty": 0},
+  "fine_structure_constant": {"value": 7.2973525693e-3, "unit": "", "uncertainty": 1.1e-12}
+}
