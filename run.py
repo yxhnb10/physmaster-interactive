@@ -13,6 +13,10 @@ from core.visualization import generate_vis
 from utils.skill_loader import resolve_skill_roots
 from utils.live_updates import UpdateInbox
 from utils.runtime_timing import RunTimer
+from utils.hard_parameters import resolve_parameters, bind_contract, parameter_text
+from utils.research_integrity import complete_run, finalize_summary
+from utils.finalizer import FinalizationAgent, write_delivery_index
+from utils.continuation import attach_context, planning_brief
 
 
 def load_config(path: str = "config.yaml") -> Dict[str, Any]:
@@ -38,13 +42,15 @@ def get_task_name(structured_problem) -> str:
 
 
 
-def clarify_query(query_path: str, clr_cfg, workflow_enabled: bool = True, config_path:str = "config.yaml") -> Dict[str, Any]:
+def clarify_query(query_path: str, clr_cfg, workflow_enabled: bool = True, config_path:str = "config.yaml", hard_parameters=None, user_inputs=None) -> Dict[str, Any]:
     """Read the query file, run it through the Clarifier LLM to produce
     a structured contract, then save contract.json to the task directory.
     Returns (structured_problem, task_dir, task_name)."""
     path = query_path
     with open(path, 'r', encoding='utf-8') as file:
         content = file.read()
+    inherited_dir = Path(clr_cfg.get('output_path', 'outputs')) / Path(path).stem
+    content += planning_brief(inherited_dir)
     print(f"[Clarifier] Clarifying query from: {path}")
 
     if workflow_enabled:
@@ -53,6 +59,8 @@ def clarify_query(query_path: str, clr_cfg, workflow_enabled: bool = True, confi
         print("[LANDAU] Workflow: disabled")
 
     clr = Clarifier(clr_cfg, workflow_enabled=workflow_enabled, config_path=config_path)
+    if hard_parameters:
+        content += '\n\n## User-locked primary parameters (must not change)\n'+parameter_text(hard_parameters)
     structured_problem = clr.run(content)
 
     # Tag the contract with the source filename for traceability
@@ -64,6 +72,8 @@ def clarify_query(query_path: str, clr_cfg, workflow_enabled: bool = True, confi
     output_root = clr_cfg.get("output_path", "outputs")
     task_dir = Path(output_root) / task_name
     os.makedirs(task_dir, exist_ok=True)
+    bind_contract(structured_problem,hard_parameters or [],user_inputs or [content],task_dir)
+    attach_context(structured_problem, task_dir)
 
     # Persist the contract so Theoretician subprocesses can read it from disk
     with open(task_dir / "contract.json", "w", encoding="utf-8") as f:
@@ -104,6 +114,9 @@ def _run_pipeline(config_path, cfg, timing):
     query_path = pipeline_cfg.get("query_file", "instructions/test.txt")
     output_root = pipeline_cfg.get("output_path", "outputs")
     clarifier_cfg["output_path"] = output_root
+    integrity_cfg = cfg.get('integrity', {}) or {}
+    user_inputs = pipeline_cfg.get('authoritative_user_inputs') or [Path(query_path).read_text(encoding='utf-8')]
+    hard_parameters = resolve_parameters(user_inputs,integrity_cfg.get('hard_parameter_text'),integrity_cfg.get('hard_parameters'))
 
     # ---- LANDAU feature flags ----
     landau_cfg = cfg.get("landau", {})
@@ -132,8 +145,12 @@ def _run_pipeline(config_path, cfg, timing):
     # ---- Stage 1: Clarify the query into a structured contract ----
     timing.change('clarifying')
     structured_problem, task_dir, task_name = clarify_query(
-        query_path, clarifier_cfg, workflow_enabled=workflow_enabled, config_path=config_path
+        query_path, clarifier_cfg, workflow_enabled=workflow_enabled, config_path=config_path,
+        hard_parameters=hard_parameters,user_inputs=user_inputs,
     )
+    structured_problem['validation_policy'] = {'python_enabled':bool(cfg.get('tools',{}).get('python_enabled',True))}
+    from utils.live_updates import atomic_json
+    atomic_json(task_dir/'contract.json',structured_problem)
     timing.change('initializing')
 
     # ---- Log enabled features ----
@@ -192,6 +209,11 @@ def _run_pipeline(config_path, cfg, timing):
             contract = Clarifier(clarifier_cfg, workflow_enabled=workflow_enabled,
                                  config_path=config_path).run(text)
             contract["instruction_filename"] = instruction_filename
+            inputs = list(user_inputs)+list(history)
+            params = resolve_parameters(inputs, configured=hard_parameters)
+            bind_contract(contract,params,inputs,task_dir)
+            attach_context(contract, task_dir)
+            contract['validation_policy'] = structured_problem['validation_policy']
             return contract
         inbox = UpdateInbox(task_dir, timing=timing)
         supervisor.update_inbox = inbox
@@ -205,10 +227,34 @@ def _run_pipeline(config_path, cfg, timing):
             inbox.close()
 
     trajectory = mcts_result.get("trajectory", []) or []
+    timing.change('delivery')
+    completion = complete_run(structured_problem,trajectory,task_dir,mcts_result.get('stop_reason','unknown'))
+    timing.change('finalization')
+    mcts_result, completion = FinalizationAgent(task_dir,cfg.get('finalization')).run(
+        structured_problem,mcts_result,completion,supervisor)
+    trajectory=mcts_result.get('trajectory',[]) or []
+    atomic_json(task_dir/'trajectory.json',trajectory)
+    if getattr(supervisor,'logger',None):
+        supervisor.logger.save_summary(mcts_result)
+
+    # ---- Stage 4: Generate markdown summary from the best trajectory ----
+    timing.change('summary')
+    summarizer = TrajectorySummarizer(prompts_path="prompts/",config_path=config_path)
+    summary_md_path = task_dir / "summary.md"
+    contract_for_summary = json.dumps(dict(structured_problem,completion_report=completion), ensure_ascii=False, indent=2)
+    summarizer.write_summary_markdown(
+        summary_md_path,
+        task_description=contract_for_summary,
+        trajectory=trajectory,
+    )
+    completion = finalize_summary(summary_md_path,completion)
+    write_delivery_index(task_dir,completion)
+    summary_text = summary_md_path.read_text(encoding="utf-8")
+    print("[Summrizer] Summary generated:", summary_md_path)
 
     # ---- Stage 3 (optional): Distill L3 wisdom into the prior index ----
     # L3 Wisdom accumulation
-    if wisdom_save_enabled and prior_enabled:
+    if wisdom_save_enabled and prior_enabled and completion['status']=='passed':
         timing.change('wisdom')
         try:
             from LANDAU.prior.wisdom_store import WisdomStore
@@ -221,21 +267,8 @@ def _run_pipeline(config_path, cfg, timing):
             )
         except Exception as e:
             print(f"[Wisdom] Failed to save wisdom: {e}")
-    elif wisdom_save_enabled and not prior_enabled:
-        print("[Wisdom] Skipped: prior_enabled is false")
-
-    # ---- Stage 4: Generate markdown summary from the best trajectory ----
-    timing.change('summary')
-    summarizer = TrajectorySummarizer(prompts_path="prompts/",config_path=config_path)
-    summary_md_path = task_dir / "summary.md"
-    contract_for_summary = json.dumps(structured_problem, ensure_ascii=False, indent=2)
-    summarizer.write_summary_markdown(
-        summary_md_path,
-        task_description=contract_for_summary,
-        trajectory=trajectory,
-    )
-    summary_text = summary_md_path.read_text(encoding="utf-8")
-    print("[Summrizer] Summary generated:", summary_md_path)
+    elif wisdom_save_enabled:
+        print("[Wisdom] Skipped: prior disabled or research has not passed final checks")
 
     # ---- Stage 5 (optional): Generate interactive HTML tree visualization ----
     if vis_cfg.get("enabled",False):

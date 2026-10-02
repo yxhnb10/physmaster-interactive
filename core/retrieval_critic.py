@@ -8,6 +8,7 @@ Fails open: any error returns the original results unchanged.
 import json
 
 from utils.llm_client import call_model_without_tools
+from utils.critic_policy import normalized_score
 
 
 SYSTEM_PROMPT = """You are a retrieval quality judge for physics research.
@@ -30,7 +31,9 @@ Do not include any prose outside the JSON."""
 class RetrievalCritic:
     def __init__(self, config_path: str = "config.yaml", threshold: float = 0.5):
         self.config_path = config_path
-        self.threshold = float(threshold)
+        self.threshold = normalized_score(threshold)
+        if self.threshold is None:
+            raise ValueError('检索评审阈值必须在 0～1 之间')
 
     def filter(self, query: str, results: list) -> list:
         """Return the subset of results whose score >= threshold.
@@ -73,11 +76,6 @@ class RetrievalCritic:
             if s >= self.threshold:
                 kept.append(r)
 
-        if not kept:
-            print(f"[RetrievalCritic] all {len(results)} below threshold "
-                  f"{self.threshold}; fail-open, return original")
-            return results
-
         return kept
 
     def _parse_scores(self, raw, expected_len):
@@ -100,7 +98,7 @@ class RetrievalCritic:
         scores = obj.get("scores")
         if not isinstance(scores, list) or len(scores) != expected_len:
             return None
-        try:
-            return [float(s) for s in scores]
-        except Exception:
+        values = [normalized_score(s) for s in scores]
+        if any(s is None for s in values):
             return None
+        return values

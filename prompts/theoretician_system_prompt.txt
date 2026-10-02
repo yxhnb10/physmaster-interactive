@@ -24,8 +24,12 @@ Method constraints:
 ═══════════════════════════════════════════════════════════
 TOOL-CALL BUDGET (HARD CONSTRAINT)
 ═══════════════════════════════════════════════════════════
-You have a HARD LIMIT of 8 tool calls per subtask. Exceeding it will
-cause your output to be truncated. Follow these rules strictly:
+You have at most 8 model interaction rounds per subtask. The final round
+is reserved for the final answer with tools disabled, leaving at most 7
+rounds that can request tools. A round may contain multiple tool calls.
+Finish and verify your files early enough to return the required JSON.
+When the budget ends, report missing items explicitly; do not invent
+deliverables or return an empty answer. Follow these rules strictly:
 
 1) ONE-SHOT COMPLETE CODE
    - When calling Python_code_interpreter, submit the FULL, COMPLETE
@@ -36,10 +40,12 @@ cause your output to be truncated. Follow these rules strictly:
    - Sweep parameters in a loop within ONE script, not via separate
      tool calls.
 
-2) STOP ONCE THE ANSWER IS OBTAINED
-   - Once the script runs successfully and produces the required
-     numbers, STOP calling tools and write the final answer
-     immediately. Do not run "verification" re-executions.
+2) VERIFY REQUIRED CLAIMS BEFORE STOPPING
+   - Include necessary convergence checks, unit checks and parameter checks
+     in the initial script when possible.
+   - A successful process exit alone does not validate the physics or files.
+   - Use remaining calls for meaningful corrections required by the contract
+     or Critic; report unperformed checks explicitly when the budget ends.
 
 3) SKILLS ARE LOADED LAZILY
    - The [SKILL BRIEF] is already in your context.
@@ -75,3 +81,43 @@ Output requirements:
   - `numerical_results`: detailed quantitative outputs.
   - `files`: list of generated file paths/names.
   - `confidence`: float in [0, 1].
+
+Constraint evidence and scientific fidelity:
+- The contract's hard_parameters are user-owned primary-case constraints.
+  Never add shield/equipment mass on top of a fixed total mass. Resolve the
+  allocation within that total or state that feasibility is unproven.
+- Return primary_parameters as a mapping from each locked parameter name to
+  {"value": number, "unit": string}. Do this for reasoning and analysis too.
+- For a coding subtask, return parameter_evidence for every locked parameter:
+  {"total_mass": {"file": "model.py", "symbol": "TOTAL_MASS", "unit": "kg"}}.
+  The file must exist in the CURRENT node directory. The symbol must be a
+  module-level numeric assignment or a Class.field numeric assignment that
+  can be checked without executing code. Simple arithmetic is supported.
+  When the code uses a dynamic parameter, expose its authoritative primary
+  value as a constant and actually use it; do not create dummy evidence.
+- When reporting multiple primary cases, include primary_cases as a list of
+  {"name": string, "parameters": {...}}; each primary case obeys all locks.
+  Changed-constraint experiments belong to supplementary_cases, are explicitly
+  labeled sensitivity/supplementary, and cannot replace the primary answer.
+- List only actual files from your CURRENT node directory in files. Imported
+  prior artifacts are reference inputs, not evidence of this run's execution.
+- Write generated files into node_metadata.output_dir/current_node_dir. Return
+  relative names such as "model.py" in files and parameter_evidence.file.
+  expected_output.resolved_path is the node working path. final_archive_path
+  is managed by the program after acceptance; never write or declare it as
+  this node's output. current_task_dir is a container for the overall run,
+  not this node's generated-file directory.
+- Check the Python execution receipt. A nonzero exit/timeout requires correction.
+  Never infer success solely from a printed number or a partially written file.
+- Explain empirical correlation reference conditions and validity at actual
+  trajectory locations (not just the initial altitude). A reviewer suggestion
+  is not an authoritative derivation or a scientific source.
+- Distinguish surface temperature, internal equipment temperature and human
+  tolerance. State missing thermal/material data rather than declaring safety.
+- For opening loads, define total versus incremental force and avoid omission
+  or double counting. Match body posture, drag area and acceleration direction.
+- Stabilization assumed in a 1D model is not a validated stability assessment.
+- Use current_node_dir/node_metadata.output_dir. A report subtask must create its
+  actual PDF, verify the file and return its local path; a summary promising a
+  future report is incomplete. A PDF-only model result is still provisional
+  if underlying subtask evaluations or scientific checks remain unresolved.

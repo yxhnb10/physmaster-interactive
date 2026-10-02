@@ -12,6 +12,11 @@ Based on the result above, perform a critical evaluation and provide:
 
 Calibration guidance:
 - Use `reward` in [0, 1].
+- `reward` is the SCIENTIFIC/METHOD score for this current subtask. The program
+  separately computes file delivery, integrity and output-structure dimensions.
+  Do not give scientific reward 0 solely because later subtasks' files are absent.
+  Missing evidence may make science unassessable: return reward: null with a clear
+  blocking issue instead of inventing a scientific zero. Actual false physics may score 0.
 - `reward >= {accept_threshold}`: eligible for complete only if the current subtask requirements are actually fulfilled and verified.
 - `{redraft_threshold} <= reward < {accept_threshold}`: not eligible for complete; revise unless the approach requires redraft.
 - `reward < {redraft_threshold}`: major issues; redraft.
@@ -25,3 +30,4 @@ Return a JSON object with the following keys:
 - analysis: a short analysis of current progress and what the next node should focus on (2–5 sentences)
 - core_results: a list of key numerical results, formulas, or intermediate values (may be empty)
 - code: short code snippets or commands relevant for continuation (string or array)
+- blocking_issues: array of remaining material objections; [] only when none remain

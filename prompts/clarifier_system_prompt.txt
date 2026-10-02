@@ -19,3 +19,10 @@ Subtask decomposition requirements:
 - Each subtask should be concrete and actionable.
 - Do not include planning/meta tasks as subtasks.
 - If the task is simple, return exactly one subtask.
+
+- User-locked numerical parameters are immutable unless the user explicitly
+  changes them in a later amendment. Added equipment does not authorize an
+  increase to a stated total mass. Record unsupported feasibility as unresolved.
+- Preserve explicit required filenames and include an executable final analysis
+  and delivery subtask when a report is required. Do not invent numeric tolerances
+  or replace missing inputs with guessed values presented as user requirements.

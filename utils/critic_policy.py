@@ -57,8 +57,12 @@ def normalized_score(value):
 
 
 def gate_evaluation(parsed, settings):
-    model_decision = str(parsed.get('decision', 'to_revise')).strip().lower()
-    if model_decision not in ('complete', 'to_revise', 'to_redraft'):
+    raw_decision = str(parsed.get('decision', parsed.get('verdict', 'to_revise'))).strip().lower()
+    aliases = {'accept':'complete', 'pass':'complete', 'refine':'to_revise', 'revise':'to_revise',
+               'redraft':'to_redraft', 'reject':'to_redraft'}
+    model_decision = aliases.get(raw_decision, raw_decision)
+    decision_valid = model_decision in ('complete', 'to_revise', 'to_redraft')
+    if not decision_valid:
         model_decision = 'to_revise'
     score = normalized_score(parsed.get('reward'))
     decision = model_decision
@@ -73,7 +77,7 @@ def gate_evaluation(parsed, settings):
     elif score < settings['accept_threshold'] and decision == 'complete':
         decision = 'to_revise'
         reason = '评分未达到通过阈值，不能认定完成。'
-    return dict(decision=decision, verdict={'complete':'accept','to_revise':'refine',
+    return dict(raw_model_decision=raw_decision, decision_valid=decision_valid, decision=decision, verdict={'complete':'accept','to_revise':'refine',
         'to_redraft':'reject'}[decision], reward=score, model_decision=model_decision,
         threshold_adjusted=decision != model_decision, policy_reason=reason,
         score_valid=normalized_score(parsed.get('reward')) is not None,

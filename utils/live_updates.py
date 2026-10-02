@@ -24,23 +24,28 @@ def atomic_json(path, value):
             os.fsync(f.fileno())
         # Keep the old valid document until replacement actually succeeds.
         # Do not unlink the target or rewrite it in place.
-        for attempt in range(30):
-            try:
-                os.replace(tmp, path)
-                break
-            except PermissionError as exc:
-                if attempt == 29:
-                    if hasattr(exc, 'add_note'):
-                        exc.add_note(f'Cannot replace {path} after 30 attempts. '
-                                     'Check persistent file locks/read-only permissions.')
-                    raise
-                time.sleep(min(0.01 * (2 ** min(attempt, 4)), 0.1))
+        replace_with_retry(tmp, path)
     finally:
         # Cleanup must never hide the original publication error.
         try:
             tmp.unlink(missing_ok=True)
         except OSError:
             pass
+
+
+def replace_with_retry(tmp, path):
+    """Use bounded retries for transient Windows reader locks, without deleting the old file."""
+    for attempt in range(30):
+        try:
+            os.replace(tmp, path)
+            break
+        except PermissionError as exc:
+            if attempt == 29:
+                if hasattr(exc, 'add_note'):
+                    exc.add_note(f'Cannot replace {path} after 30 attempts. '
+                                 'Check persistent file locks/read-only permissions.')
+                raise
+            time.sleep(min(0.01 * (2 ** min(attempt, 4)), 0.1))
 
 
 class UpdateInbox:

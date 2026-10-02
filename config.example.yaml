@@ -27,6 +27,18 @@ mcts:
   revise_expansion: 2
   exploration_constant: 1.2
   active_beam_width: 2
+critic:
+  accept_threshold: 0.85
+  redraft_threshold: 0.60
+finalization:
+  # At most one extra report-only node after science/data subtasks are accepted.
+  # These model calls are additional to pipeline.max_rounds. 0 disables them.
+  enabled: true
+  max_attempts: 1
+integrity:
+  # Optional user-owned numerical locks, one per line: name = value unit.
+  # Leave blank for normal use; the web page accepts per-task locks.
+  hard_parameter_text: ''
 clarifier:
   max_key_concpets: 5
 skills:
@@ -43,6 +55,7 @@ landau:
 visualization:
   enabled: true
 tools:
+  python_enabled: true
   web_enabled: true
   codata_enabled: false
   search_provider: tavily
@@ -58,3 +71,9 @@ tools:
   retrieval_critic:
     enabled: true
     threshold: 0.5
+
+# v9.3 Complete: retries are additional API calls within the current round.
+repair:
+  enabled: true
+  max_node_retries: 1    # 0..3; fresh node + fresh review for delivery/code failures
+  max_critic_retries: 1  # 0..3; same output, no solver rerun for invalid reviews

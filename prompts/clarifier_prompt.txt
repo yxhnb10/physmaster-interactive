@@ -10,7 +10,11 @@ Additional runtime constraints:
 - Keep only constraints that are truly relevant to this task.
 - Do not include planning/workflow design as a subtask.
 - `task_description` and relevant `subtasks[*].description` must explicitly retain user-specified methods (e.g., formulas/models, `gvar.load`, key patterns, shapes, path rules, output checks).
+- Set each subtask research_stage to EXPLORATION, MODEL_BUILDING, SIMULATION, VALIDATION or FINALIZATION.
+- Each subtask expected_output lists only files/results due in THAT subtask. Put final PDFs in the report subtask; keep ALL required deliverables in the top-level expected_output. Do not copy the global output list into every subtask.
 - Before output, verify no required method detail was dropped.
 - Do not output schema/template metadata keys like `$schema`, `$id`, `properties`, `required`, or `definitions`.
 
 Now output ONLY the JSON object that adheres to the schema and constraints above.
+
+For INCREMENTAL CONTINUATION, fill continuation_plan with unchanged inputs to reuse, new/affected work, and impact checks. Subtasks must focus on the new amendments and affected validation/reporting, rather than repeating unaffected historical exploration/model construction. Inherit historical model/data as inputs; do not claim new acceptance without review.

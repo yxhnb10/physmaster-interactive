@@ -7,3 +7,11 @@ Requirements:
 - Start with `# Summary`.
 - Include sections: `## Task`, `## Key Reasoning Steps`, `## Final Outcome`, `## Open Issues`.
 - Use only information present in the provided trajectory.
+- Read completion_report in the supplied contract. If its status is partial,
+  call results provisional and list missing/unchecked items explicitly.
+- Use only the current-run artifact paths and verified availability recorded in
+  completion_report. A node's claimed filename is not verified delivery.
+- Keep rejected attempts and supplementary changed-constraint cases separate
+  from the primary answer. Do not turn a to_revise attempt into a final result.
+- Quote user-locked primary parameters correctly. Do not assert survivability
+  from surface temperature, a 1D stability assumption or solver convergence.

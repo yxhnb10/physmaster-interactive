@@ -2,12 +2,17 @@ import json
 import os
 from pathlib import Path
 from typing import Dict, Any, List
+import yaml
+from utils.python_utils import execution_receipt
+from utils.research_integrity import node_contract_for_solver
 
 from LANDAU.library import LibraryRetriever
-from utils.llm_client import call_model
+from utils.llm_client import call_model, LLMResponseError
 from utils.python_utils import run_python_code
 from utils.skill_loader import build_skill_brief_prompt, load_skill_specs
 from utils.tool_schemas import LIBRARY_TOOLS, THEORETICIAN_CORE_TOOLS
+from utils.capabilities import capability_values
+from utils.continuation import tool_schemas, list_files, read_file, reuse_file, finish_reuse, baseline_previews
 
 class Theoretician:
     """The solver agent. Given a subtask description and accumulated context,
@@ -15,7 +20,13 @@ class Theoretician:
 
     def __init__(self, prompts_path: str = "prompts/", library_enabled: bool = True, config_path :str = 'config.yaml'):
         self.prompts_path = Path(prompts_path)
-        self.library_enabled = bool(library_enabled)
+        self.config_path = config_path
+        cfg_path = Path(config_path)
+        cfg = yaml.safe_load(cfg_path.read_text(encoding='utf-8')) if cfg_path.is_file() else {}
+        flags = capability_values(cfg or {})
+        self.library_enabled = bool(library_enabled) and flags['arxiv_search']
+        self.python_enabled = flags['python']
+        self.skills_enabled = flags['skills']
         self.library_retriever = None
         if self.library_enabled:
             try:
@@ -23,7 +34,6 @@ class Theoretician:
             except Exception as e:
                 print(f"[Theoretician] Warning: LibraryRetriever init failed: {e}. Library search disabled for this node.")
                 self.library_enabled = False
-        self.config_path = config_path
         prompt_files = {
             "theoretician_prompt": "theoretician_prompt.txt",
             "theoretician_system_prompt": "theoretician_system_prompt.txt",
@@ -65,9 +75,8 @@ class Theoretician:
         node_metadata: Dict[str, Any] | None = None,
         prior_knowledge: str | None = None,
         parent_critic_feedback: Dict[str, Any] | None = None,
-    ) -> Dict[str, Any]:
-        """Run the LLM with tools to solve a single subtask. Returns the
-        raw LLM response string."""
+    ) -> tuple[str, list]:
+        """Return the final response and tool receipts, including on delivery failure."""
         output_dir = str(node_metadata.get("output_dir", "")) if node_metadata else ""
 
         prompt = self.prompt_template.format(
@@ -98,13 +107,14 @@ class Theoretician:
             )
             prompt = feedback_block + prompt
 
-        tools = THEORETICIAN_CORE_TOOLS + (LIBRARY_TOOLS if self.library_enabled else [])
-        tool_functions = {
-            "Python_code_interpreter": run_python_code,
-            "load_skill_specs": load_skill_specs,
-        }
+        allowed = set()
+        if self.python_enabled:
+            allowed.add('Python_code_interpreter')
+        if self.skills_enabled:
+            allowed.add('load_skill_specs')
+        tools = [tool for tool in THEORETICIAN_CORE_TOOLS if tool['function']['name'] in allowed]
         if self.library_enabled:
-            tool_functions["library_search"] = self._library_search
+            tools += LIBRARY_TOOLS
 
         # Wrap raw tool functions with logging so we can trace tool usage per node
         system_prompt = self.theoretician_system_prompt
@@ -114,24 +124,42 @@ class Theoretician:
             def wrapper(**kwargs):
                 self._log_tool_call(name, node_metadata)
                 result = fn(**kwargs)
-                tool_call_log.append({
+                record = {
                     "tool": name,
                     "arguments": kwargs,
                     "result": result,
-                })
+                }
+                if name == 'Python_code_interpreter':
+                    record['execution'] = execution_receipt(result)
+                tool_call_log.append(record)
                 return result
             return wrapper
 
-        wrapped_tool_functions = {
-            "Python_code_interpreter": _wrap("Python_code_interpreter",
-                                             lambda **kw: run_python_code(cwd=output_dir or None, **kw)),
-            "load_skill_specs": _wrap("load_skill_specs", load_skill_specs),
-        }
+        wrapped_tool_functions = {}
+        inherited_task = (node_metadata or {}).get('task_dir')
+        if inherited_task and (Path(inherited_task) / 'inheritance.json').is_file():
+            tools += tool_schemas()
+            wrapped_tool_functions['list_inherited_files'] = _wrap('list_inherited_files',
+                lambda **kw: list_files(inherited_task, **kw))
+            wrapped_tool_functions['read_inherited_file'] = _wrap('read_inherited_file',
+                lambda **kw: read_file(inherited_task, output_dir, **kw))
+            wrapped_tool_functions['reuse_inherited_file'] = _wrap('reuse_inherited_file',
+                lambda **kw: reuse_file(inherited_task, output_dir, **kw))
+        if self.python_enabled:
+            wrapped_tool_functions['Python_code_interpreter'] = _wrap('Python_code_interpreter',
+                lambda **kw: run_python_code(cwd=output_dir or None, **kw))
+        else:
+            prompt = ('Python execution is disabled for this task. Do not claim code or numerical '
+                      'checks were executed. Clearly label unexecuted code and unverified results.\n\n' + prompt)
+        if self.skills_enabled:
+            wrapped_tool_functions['load_skill_specs'] = _wrap('load_skill_specs',
+                lambda **kw: load_skill_specs(config_path=self.config_path, **kw))
         if self.library_enabled:
             wrapped_tool_functions["library_search"] = _wrap("library_search", self._library_search)
 
         # Prepend a brief of all available skills so the LLM can decide to load any
-        prompt = build_skill_brief_prompt() + "\n\n" + prompt
+        if self.skills_enabled:
+            prompt = build_skill_brief_prompt(config_path=self.config_path) + "\n\n" + prompt
 
         node_type_for_role = (node_metadata or {}).get("node_type", "draft")
         if node_type_for_role == "draft":
@@ -139,15 +167,30 @@ class Theoretician:
         else:
             chosen_model = "deepseek-v4-pro"
 
-        response = call_model(
-            system_prompt=system_prompt,
-            user_prompt=prompt,
-            tools=tools,
-            tool_functions=wrapped_tool_functions,
-            model_name=chosen_model,
-            max_tool_calls=8,
-            config_path=self.config_path,
-        )
+        try:
+            response = call_model(
+                system_prompt=system_prompt,
+                user_prompt=prompt,
+                tools=tools,
+                tool_functions=wrapped_tool_functions,
+                model_name=chosen_model,
+                max_tool_calls=8,
+                config_path=self.config_path,
+            )
+        except Exception as exc:
+            # Keep completed tool receipts attached to the node. Files on disk
+            # are candidates for repair, never automatically accepted artifacts.
+            diagnostic = (exc.diagnostic if isinstance(exc, LLMResponseError)
+                          else dict(reason='api_or_client_error', error_type=type(exc).__name__,
+                                    message=str(exc)))
+            response = json.dumps(dict(
+                delivery_status='failed', delivery_error=diagnostic,
+                analysis='Final answer delivery failed. Prior tool receipts are retained; '
+                         'no result or artifact is accepted from this failure response.',
+                primary_parameters={}, parameter_evidence={}, files=[],
+                partial_response_unverified=getattr(exc, 'partial_response', ''),
+            ), ensure_ascii=False)
+            print(f"[Theoretician] final answer delivery failed: {exc}", flush=True)
 
         return response, tool_call_log
 
@@ -160,21 +203,28 @@ def run_theo_node(payload: Dict[str, Any],config_path:str = 'config.yaml') -> Di
         depth = payload["depth"]
         node_id = int(payload["node_id"])
         structured_problem = payload["structured_problem"]
-        description = payload["subtask"]["description"]
+        from core.research_lifecycle import stage_contract
+        description = payload["subtask"]["description"] + "\n## Research stage scope\n" + json.dumps(stage_contract(payload["subtask"]), ensure_ascii=False)
         task_dir = str(Path(payload["task_dir"]).resolve())
-
-        # Immutable contract snapshot from the dispatcher, shared by this batch.
-        description = ("## Authoritative task contract\n"
-                       + json.dumps(structured_problem, ensure_ascii=False, indent=2)
-                       + "\nLater live_updates override conflicting earlier conditions; "
-                       + "do not treat earlier results as verified under changed assumptions.\n"
-                       + "## Current subtask\n" + description)
 
         theoretician = Theoretician(library_enabled=bool(payload.get("library_enabled", True)),config_path=config_path)
 
         # Each node gets its own output directory for generated files
         node_output_dir = str((Path(task_dir) / f"node_{node_id}").resolve())
         os.makedirs(node_output_dir, exist_ok=True)
+
+        # Keep the dispatcher's contract unchanged. Solver paths refer to its
+        # own node; final archive paths are explicitly owned by the program.
+        solver_contract = node_contract_for_solver(structured_problem,node_output_dir)
+        if solver_contract.get('continuation_context'):
+            solver_contract['inherited_code_previews'] = baseline_previews(task_dir, node_output_dir)
+        description = ("## Authoritative task contract\n"
+                       + json.dumps(solver_contract, ensure_ascii=False, indent=2)
+                       + "\nLater live_updates override conflicting earlier conditions; "
+                       + "do not treat earlier results as verified under changed assumptions.\n"
+                       + "Generate files only in current_node_dir. Return node-relative file and "
+                       + "parameter_evidence paths. Final archive paths are handled by the program.\n"
+                       + "## Current subtask\n" + description)
 
         node_metadata = {
             "depth": depth,
@@ -192,10 +242,16 @@ def run_theo_node(payload: Dict[str, Any],config_path:str = 'config.yaml') -> Di
             prior_knowledge=payload.get("prior_knowledge", ""),
             parent_critic_feedback=payload.get("parent_critic_feedback"),
         )
+        from utils.research_integrity import parse_output
+        finish_reuse(task_dir, node_output_dir, parse_output(result))
+        try:
+            delivery_failed = json.loads(result).get('delivery_status') == 'failed'
+        except (ValueError, AttributeError, TypeError):
+            delivery_failed = False
         print(
             f"[Theoretician] "
             f"(node_id={node_id} subtask_id={payload['subtask']['id']} node_type={payload['node_type']}) "
-            f"task completed ✅"
+            + ("node finished; final answer delivery failed ❌" if delivery_failed else "node response returned ✅")
         )
 
         return {

@@ -61,3 +61,12 @@ When calling `web_search`, the `query` argument MUST:
 
 If your first search returns results from an unrelated field, REWRITE the
 query with more context and call the tool again.
+
+
+Integrity and completion:
+- Preserve user-owned hard_parameters in every dispatch and every primary case.
+- An unresolved Critic or program integrity audit must be revised before moving on.
+- Leave adequate task scope for final analysis and actual required-file creation.
+  Respect the configured round budget; if exhausted, report partial completion.
+- Old summaries/files are unverified references. Never promote their absolute
+  output path into the current run's required final deliverable location.

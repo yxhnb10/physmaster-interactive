@@ -5,31 +5,96 @@
   "description": "A JSON schema for structured research tasks in physics.",
   "type": "object",
   "properties": {
-    "topic": { "type": "string" },
-    "domain": { "type": "string" },
-    "subdomain": { "type": "string" },
+    "topic": {
+      "type": "string"
+    },
+    "domain": {
+      "type": "string"
+    },
+    "subdomain": {
+      "type": "string"
+    },
     "related_knowledge": {
       "type": "array",
-      "items": { "type": "string" }
+      "items": {
+        "type": "string"
+      }
     },
-    "task_type": { "type": "string" },
-    "task_background": { "type": "string" },
-    "task_description": { "type": "string" },
+    "task_type": {
+      "type": "string"
+    },
+    "task_background": {
+      "type": "string"
+    },
+    "task_description": {
+      "type": "string"
+    },
     "input": {
       "type": "object",
       "properties": {
-        "format": { "type": "string" },
-        "path": { "type": "string", "default": "none" },
-        "description": { "type": "string" }
+        "format": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string",
+          "default": "none"
+        },
+        "description": {
+          "type": "string"
+        }
       },
-      "required": ["format", "path"]
+      "required": [
+        "format",
+        "path"
+      ]
     },
     "constraints": {
       "type": "array",
-      "items": { "type": "string" }
+      "items": {
+        "type": "string"
+      }
     },
-    "expected_output": { "$ref": "#/definitions/expected_output" },
-    "subtasks": { "$ref": "#/definitions/subtasks" }
+    "expected_output": {
+      "$ref": "#/definitions/expected_output"
+    },
+    "subtasks": {
+      "$ref": "#/definitions/subtasks"
+    },
+    "continuation_plan": {
+      "type": "object",
+      "description": "For incremental continuation: identify unaffected work to reuse, changes/new work, and impact checks. Never grant automatic acceptance.",
+      "properties": {
+        "reuse": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "file_id": {
+                "type": "string"
+              },
+              "unchanged_reason": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "affected": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "new_work": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "rationale": {
+          "type": "string"
+        }
+      }
+    }
   },
   "required": [
     "topic",
@@ -47,11 +112,27 @@
       "items": {
         "type": "object",
         "properties": {
-          "format": { "type": "string", "enum": ["PDF", "Code", "CSV", "Image", "Text"] },
-          "path": { "type": "string" },
-          "description": { "type": "string" }
+          "format": {
+            "type": "string",
+            "enum": [
+              "PDF",
+              "Code",
+              "CSV",
+              "Image",
+              "Text"
+            ]
+          },
+          "path": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          }
         },
-        "required": ["format", "path"]
+        "required": [
+          "format",
+          "path"
+        ]
       }
     },
     "subtasks": {
@@ -60,13 +141,43 @@
       "items": {
         "type": "object",
         "properties": {
-          "id": { "type": "integer" },
-          "subtask_type": { "type": "string", "enum": ["reasoning", "coding", "analysis"] },
-          "input": { "type": "string" },
-          "expected_output": { "type": "string" },
-          "description": { "type": "string" }
+          "id": {
+            "type": "integer"
+          },
+          "subtask_type": {
+            "type": "string",
+            "enum": [
+              "reasoning",
+              "coding",
+              "analysis"
+            ]
+          },
+          "input": {
+            "type": "string"
+          },
+          "expected_output": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "research_stage": {
+            "type": "string",
+            "enum": [
+              "EXPLORATION",
+              "MODEL_BUILDING",
+              "SIMULATION",
+              "VALIDATION",
+              "FINALIZATION"
+            ],
+            "description": "Scope of this subtask, independent of draft/revise attempts."
+          }
         },
-        "required": ["id", "subtask_type", "description"]
+        "required": [
+          "id",
+          "subtask_type",
+          "description"
+        ]
       }
     }
   }

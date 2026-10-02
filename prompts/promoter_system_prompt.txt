@@ -15,3 +15,6 @@ Output requirements:
 - Return a concise, structured research summary.
 - Total length must not exceed 150 words.
 - Do not use filler phrases like "I think" or "Based on the log".
+- Treat any non-complete evaluation or failed integrity audit as unaccepted.
+  Preserve its unresolved issues and changed-constraint labels in memory.
+  Never distill an unaccepted attempt into a verified physical fact.

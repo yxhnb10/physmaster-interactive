@@ -116,7 +116,7 @@ class MCTSNode:
         current: Optional["MCTSNode"] = self
         while current is not None:
             current.update_stats(reward)
-            if reward >= 0.8 and current != self:
+            if reward >= 0.8 and current != self and self.is_subtask_complete():
                 self._apply_cognitive_reinforcement(source=self, target=current)
             current = current.parent
 
@@ -132,7 +132,7 @@ class MCTSNode:
         if not original_knowledge.strip():
             return
 
-        verification_tag = f"## Verified Knowledge from Node {source.node_id}"
+        verification_tag = f"## Reviewed Knowledge from Node {source.node_id}"
 
         if verification_tag not in (target.knowledge or ""):
             new_insight = f"\n{verification_tag}\n{original_knowledge}"
@@ -165,7 +165,7 @@ class MCTSNode:
                 skip_block = True
                 continue
             # Skip new-style ## Verified Knowledge blocks
-            if line.strip().startswith('## Verified Knowledge from Node'):
+            if line.strip().startswith(('## Verified Knowledge from Node','## Reviewed Knowledge from Node')):
                 skip_block = True
                 continue
             # End of a verified block when we hit another section marker or empty line after content
@@ -188,11 +188,12 @@ class MCTSNode:
 
     def is_subtask_complete(self) -> bool:
         """Check whether the critic judged this subtask as complete.
-        Looks for decision=='complete' or verdict=='accept'."""
+        Requires consistent acceptance, valid score and the program audit."""
         feedback = self.evaluation or {}
         decision = str(feedback.get("decision", "")).strip().lower()
         verdict = str(feedback.get("verdict", "")).strip().lower()
-        return decision == "complete" or verdict == "accept"
+        return (decision == 'complete' and verdict == 'accept' and feedback.get('score_valid') is True
+                and feedback.get('integrity_audit',{}).get('status') == 'pass' and not feedback.get('blocking_issues'))
 
     def node_id_number(self) -> int:
         return int(self.node_id)

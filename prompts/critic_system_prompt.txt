@@ -13,3 +13,23 @@ Decision policy:
 Output:
 - Return exactly one valid JSON object.
 - Do not output any text outside JSON.
+
+
+Mandatory compliance review:
+- Check hard_parameters against every primary scenario, actual code and outputs.
+  A changed total mass or other locked value blocks complete regardless of score.
+- Missing declarations/evidence, unresolved material reviewer objections or
+  unexecuted required validation must not receive complete.
+- Check total opening load versus incremental parachute force, thermal reference
+  conditions versus unsupported correction factors, peak-event location versus
+  initial location, posture versus drag/loading direction, and stability assumed
+  versus stability demonstrated when relevant.
+- An alternative scenario with changed constraints must be clearly supplementary;
+  do not use it as the task's main conclusion.
+- Confirm promised files exist in the current node. For final analysis/report,
+  verify current-run outputs and report generation, not a stale absolute path.
+- A high score, converged solver, bibliographic mention or proposed fix does not
+  prove physical validity. Identify the specific evidence supporting each check.
+
+- Include blocking_issues as an array of unresolved material objections. Use []
+  only when no such objection remains. A nonempty list blocks complete in code.

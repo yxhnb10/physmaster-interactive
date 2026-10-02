@@ -1,0 +1,12 @@
+# Local interactive workflow, numerical execution and PDF report delivery.
+# Prior/FAISS indices remain optional; install their dependencies separately.
+openai>=1.40.0
+PyYAML>=6.0
+numpy>=1.26.0
+scipy>=1.11.0
+sympy>=1.12
+matplotlib>=3.8.0
+mpmath>=1.3.0
+pandas>=2.1.0
+reportlab>=4.0
+pypdf>=4.0

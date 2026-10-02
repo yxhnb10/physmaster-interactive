@@ -1,21 +1,18 @@
-"""Core modules for PHY Master."""
+"""Core exports load on demand; policy/UI helpers do not require the model SDK."""
+from importlib import import_module
 
-from .clarifier import Clarifier
-from .mcts import MCTSNode, MCTSTree
-from .summarizer import TrajectorySummarizer
-from .supervisor import SupervisorOrchestrator
-from .theoretician import Theoretician, run_theo_node
-from .visualization import build_mcts_html, generate_vis, write_mcts_html
+_EXPORTS = {
+    'Clarifier': 'clarifier', 'MCTSNode': 'mcts', 'MCTSTree': 'mcts',
+    'TrajectorySummarizer': 'summarizer', 'SupervisorOrchestrator': 'supervisor',
+    'Theoretician': 'theoretician', 'run_theo_node': 'theoretician',
+    'build_mcts_html': 'visualization', 'generate_vis': 'visualization', 'write_mcts_html': 'visualization',
+}
+__all__ = list(_EXPORTS)
 
-__all__ = [
-    "Clarifier",
-    "MCTSNode",
-    "MCTSTree",
-    "TrajectorySummarizer",
-    "SupervisorOrchestrator",
-    "Theoretician",
-    "run_theo_node",
-    "build_mcts_html",
-    "write_mcts_html",
-    "generate_vis",
-]
+
+def __getattr__(name):
+    if name not in _EXPORTS:
+        raise AttributeError(name)
+    value = getattr(import_module('.' + _EXPORTS[name], __name__), name)
+    globals()[name] = value
+    return value

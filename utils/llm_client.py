@@ -9,6 +9,41 @@ from openai import OpenAI
 from utils.runtime_timing import measure_operation
 
 
+class LLMResponseError(RuntimeError):
+    """A response that cannot be used as a completed answer."""
+
+    def __init__(self, reason, model, finish_reason, round_index, partial_response=""):
+        self.diagnostic = dict(reason=reason, model=model,
+                               finish_reason=finish_reason, round=round_index)
+        self.partial_response = partial_response
+        super().__init__(f"LLM final response failed: {reason}; model={model}; "
+                         f"finish={finish_reason}; round={round_index}")
+
+
+def _final_text(choice, model, round_index):
+    content = (choice.message.content or "").strip()
+    if choice.message.tool_calls:
+        reason = "unexpected_tool_calls"
+    elif choice.finish_reason != "stop":
+        reason = "truncated_response" if choice.finish_reason == "length" else "incomplete_response"
+    elif not content:
+        reason = "empty_response"
+    else:
+        return content
+    raise LLMResponseError(reason, model, choice.finish_reason, round_index, content)
+
+
+FINAL_RESPONSE_PROMPT = (
+    "The model interaction budget ends with this response. Tools are disabled. "
+    "Return a non-empty final answer in the exact format required by the system prompt. "
+    "Use only results already obtained; do not claim new execution or invent files, "
+    "parameter evidence, tests, or results. If JSON is required, return a complete JSON "
+    "object and explicitly describe missing deliverables and unverified results. "
+    "Report primary parameters and file/symbol evidence only when supported by the "
+    "task contract and actual tool results. Do not return a plan or request another tool."
+)
+
+
 def _load_llm_config(config_path: str | Path | None = None) -> Dict[str, Any]:
     """Read the 'llm' section from config.yaml. Requires base_url,
     api_key, and model to be present."""
@@ -78,7 +113,7 @@ class LLMClient:
             )
         dt = time.time() - t0
         print(f"[LLM] (no tools) done dt={dt:.1f}s", flush=True)
-        return (completion.choices[0].message.content or "").strip()
+        return _final_text(completion.choices[0], actual_model, 1)
 
     def call_with_tools(
         self,
@@ -88,8 +123,12 @@ class LLMClient:
         tool_functions=None,
         model_name=None,
         role: Optional[str] = None,
-        max_tool_calls: int = 8,   # 20 -> 8
+        max_tool_calls: int = 8,
     ) -> str:
+        # Legacy name: this limits model rounds, not the number of tool calls.
+        # Reserve the last round for delivery without adding to the API budget.
+        if isinstance(max_tool_calls, bool) or not isinstance(max_tool_calls, int) or max_tool_calls < 1:
+            raise ValueError("max_tool_calls must be a positive integer model-round budget")
         actual_model = self._resolve_model(role, model_name)
         t0 = time.time()
         tools = tools or []
@@ -100,13 +139,16 @@ class LLMClient:
         ]
 
         for iteration in range(max_tool_calls):
+            final_round = iteration == max_tool_calls - 1
+            if final_round:
+                messages.append({"role": "user", "content": FINAL_RESPONSE_PROMPT})
             t_llm = time.time()
             print(f"[LLM] iter={iteration} model={model_name or self.model}", flush=True)
             with measure_operation('llm:' + (role or 'default')):
                 completion = self.client.chat.completions.create(
                     model=actual_model,
                     messages=messages,
-                    tools=tools if tools else None,
+                    tools=tools if tools and not final_round else None,
                 )
             llm_dt = time.time() - t_llm
             msg = completion.choices[0].message
@@ -114,6 +156,16 @@ class LLMClient:
             print(f"[LLM] iter={iteration} llm_dt={llm_dt:.1f}s tools={n_tools} "
                   f"finish={completion.choices[0].finish_reason} elapsed={time.time()-t0:.1f}s",
                   flush=True)
+
+            # Never execute tools requested in the reserved delivery round, or
+            # treat truncated/empty content as a successful final answer.
+            if final_round or not msg.tool_calls:
+                response = _final_text(completion.choices[0], actual_model, iteration + 1)
+                print(f"[LLM] done total={time.time()-t0:.1f}s", flush=True)
+                return response
+            if completion.choices[0].finish_reason == "length":
+                raise LLMResponseError("truncated_tool_request", actual_model,
+                                       "length", iteration + 1, msg.content or "")
 
             messages.append({
                 "role": "assistant",
@@ -132,12 +184,6 @@ class LLMClient:
             })
 
             tool_call_list = msg.tool_calls or []
-            if not tool_call_list:
-                if completion.choices[0].finish_reason == "stop":
-                    print(f"[LLM] done total={time.time()-t0:.1f}s", flush=True)
-                    return (msg.content or "").strip()
-                continue
-
             for tc in tool_call_list:
                 t_tool = time.time()
                 raw_args = tc.function.arguments or "{}"
@@ -162,11 +208,6 @@ class LLMClient:
                     "content": str(result),
                 })
 
-        print(f"[LLM] hit max_tool_calls={max_tool_calls} elapsed={time.time()-t0:.1f}s", flush=True)
-        for message in reversed(messages):
-            if message.get("role") == "assistant" and message.get("content"):
-                return str(message["content"]).strip()
-        return ""
 
 
 _DEFAULT_CLIENT: "LLMClient | None" = None

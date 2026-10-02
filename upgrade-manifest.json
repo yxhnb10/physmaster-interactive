@@ -1,0 +1,102 @@
+{
+  "version": "v9.4-incremental",
+  "base": "v9.3 Complete (with or without history/dispatch patches)",
+  "files": [
+    {
+      "path": "run.py",
+      "sha256": "06f93446ed45e4add747a0a8c4992a2dad74b64ec889a2e944d9343c28834de1",
+      "bytes": 12918
+    },
+    {
+      "path": "web_server.py",
+      "sha256": "6931bc9aa6bff4b7a220fff94368edd2cee1e168081ddf5b7cf6a6525e230127",
+      "bytes": 37735
+    },
+    {
+      "path": "core/supervisor.py",
+      "sha256": "f99d61e9a5b02dec1c5ce5c5d2ddb830c84c8e48b8d130f47baadae68b028fa6",
+      "bytes": 72757
+    },
+    {
+      "path": "core/theoretician.py",
+      "sha256": "d3c0dd84c1d73d27886b2b688884abfb77cc6fc93a869f9b96c500541482484c",
+      "bytes": 12840
+    },
+    {
+      "path": "utils/continuation.py",
+      "sha256": "ef32a8bef0444af0d5d1c43e6d528f4c78f4d6eed8cf34edadbbd82084e16164",
+      "bytes": 21989
+    },
+    {
+      "path": "utils/contract_template.json",
+      "sha256": "f7f55cdf414d6379b7e65685f86fdbe04d0f399e64eeb84d861fec64ac63c522",
+      "bytes": 3966
+    },
+    {
+      "path": "utils/finalizer.py",
+      "sha256": "73dc397ba11eb715798ecd82320d3bf706df5da1e23babe5cecc2227b983e098",
+      "bytes": 7254
+    },
+    {
+      "path": "utils/python_utils.py",
+      "sha256": "9a9210f9ecbecd8d40c59b9e82c8901e2fe434657328f3ad0d64fca51971c489",
+      "bytes": 1989
+    },
+    {
+      "path": "utils/research_monitor.py",
+      "sha256": "bf8fe08bfe967fcb57880f4455360e35dbb6b5dd4681c96186e610b60cdbbd87",
+      "bytes": 5628
+    },
+    {
+      "path": "prompts/clarifier_prompt.txt",
+      "sha256": "8b6aee76a7f0b9b4fa3cbd50942781da9b3d6a3093da40969f969f177bcb4fd8",
+      "bytes": 1615
+    },
+    {
+      "path": "web/index.html",
+      "sha256": "8ab3f8f359d910bad3ed39c635a21d7794e74458fb2bad30a785e29b0635e8b1",
+      "bytes": 77515
+    },
+    {
+      "path": "tools/upgrade_release.py",
+      "sha256": "428df79542637f8462268ac10faab806a5f361b68db172b2eb4e4822b393d81d",
+      "bytes": 5074
+    },
+    {
+      "path": "README-v9.4.md",
+      "sha256": "d5585d2f09620f90d213de73dadf6985d20195fb1680e848c3cdb73ad3121a4a",
+      "bytes": 3658
+    },
+    {
+      "path": "tests/test_continuation_v94.py",
+      "sha256": "c710532dffa8c10a8e44633939169fbbe8ec58ef61e51115ad037109ee3942d6",
+      "bytes": 10481
+    },
+    {
+      "path": "tests/test_continuation_tools_v94.py",
+      "sha256": "eb3ceee7424e8782ad2c09ad2bb24eca90b88c883f6fa47e3d3250ec5376ca4a",
+      "bytes": 2714
+    },
+    {
+      "path": "tests/test_chat_server.py",
+      "sha256": "bbc48467ded7347e8bc31b57e3a156c55045d229e4a8ef13fcd3675a7102890e",
+      "bytes": 29178
+    },
+    {
+      "path": "tests/test_v9_pipeline.py",
+      "sha256": "d9af4a0cd8508c7b30469c97bd95259b009d2cc1bf66148b304c6d00ede98897",
+      "bytes": 17179
+    },
+    {
+      "path": "tests/mock_openai_runtime.py",
+      "sha256": "fc0bba6c39838b712c89e7d7267e587a3169da0d5105ed2290573ea902cca191",
+      "bytes": 7121
+    },
+    {
+      "path": "tests/test_inheritance_dashboard_v94.cjs",
+      "sha256": "4db15fe53b67e6f42be8f38e8dfeda1a45e087841af7c49d58659c8df0b3ac80",
+      "bytes": 4019
+    }
+  ],
+  "removed": []
+}

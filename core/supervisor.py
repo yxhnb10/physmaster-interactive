@@ -21,6 +21,8 @@ from LANDAU.library import LibraryRetriever
 from .mcts import MCTSNode, MCTSTree
 from utils.live_updates import atomic_json
 from utils.research_monitor import ResearchMonitor
+from utils.runtime_timing import timed_stage
+from utils.research_integrity import audit_node, enforce_audit, normalize_node_paths
 
 try:
     from LANDAU.prior.prior_retrieve import PriorRetriever
@@ -67,7 +69,9 @@ class SupervisorOrchestrator:
         debug_logging: bool = False,
         update_inbox=None,
         rebuild_contract=None,
+        timing=None,
     ):
+        self.timing = timing
         self.update_inbox = update_inbox
         self.rebuild_contract = rebuild_contract
         self.revision_start_round = 0
@@ -104,6 +108,10 @@ class SupervisorOrchestrator:
         with open(config_path, "r", encoding="utf-8") as f:
             _cfg = yaml.safe_load(f)
         self.tools_cfg = _cfg.get("tools", {}) or {}
+        from utils.critic_policy import critic_settings_from_config
+        self.critic_settings = critic_settings_from_config(_cfg)
+        from core.repair_agent import repair_settings
+        self.repair_settings = repair_settings(_cfg)
         self.web_enabled = bool(self.tools_cfg.get("web_enabled", False))
         self.codata_enabled = bool(self.tools_cfg.get("codata_enabled", True))
 
@@ -195,6 +203,7 @@ class SupervisorOrchestrator:
                 initializer=_init_worker,
             )
 
+    @timed_stage('prior', enabled='landau_prior_enabled')
     def _get_prior_knowledge(self, structured_problem) -> str:
         """Retrieve top-3 prior references from the FAISS index at startup.
         These are included in every Theoretician prompt as background context."""
@@ -241,13 +250,16 @@ class SupervisorOrchestrator:
     def run(self) -> Dict[str, Any]:
         """Main MCTS loop. Returns a summary dict with the best trajectory,
         completed subtasks, node count, round count, and tree statistics."""
+        stop_reason = 'unknown'
         while True:
             self._control_checkpoint()
             self._apply_pending_updates()
             if self.round_counter >= self.max_rounds:
+                stop_reason = 'round_budget_exhausted'
                 break
             selected_node = self._select_leaf_node()
             if selected_node is None:
+                stop_reason = 'no_selectable_node'
                 break
 
             dispatch = self._resolve_dispatch(selected_node)
@@ -255,6 +267,7 @@ class SupervisorOrchestrator:
                 self._control_checkpoint()
                 if self._apply_pending_updates():
                     continue
+                stop_reason = 'no_dispatch'
                 break
 
             if getattr(self, "monitor", None):
@@ -292,6 +305,7 @@ class SupervisorOrchestrator:
 
             # Early termination: all subtasks completed along one path
             if self._find_full_completion_path() is not None:
+                stop_reason = 'all_subtasks_completed'
                 break
 
         if self.update_inbox is not None:
@@ -303,6 +317,7 @@ class SupervisorOrchestrator:
         trajectory = self._serialize_trajectory(best_path_nodes)
 
         summary = {
+            "stop_reason": stop_reason,
             "contract_revision": self.live_revision,
             "completed_subtasks": completed_subtasks,
             "total_nodes": len(self.tree.get_all_nodes()),
@@ -326,6 +341,10 @@ class SupervisorOrchestrator:
         items = self.update_inbox.pending()
         if not items:
             return False
+        return self._replan_updates(items)
+
+    @timed_stage('replanning')
+    def _replan_updates(self, items):
         self.update_inbox.progress("replanning", self.round_counter, self.live_revision)
         history = self.live_update_history + [text for _, text in items]
         contract = self.rebuild_contract(history)
@@ -335,6 +354,9 @@ class SupervisorOrchestrator:
         # Keep raw amendments even if the Clarifier omits a detail.
         contract["live_updates"] = history
         contract["contract_revision"] = revision
+        # Replanning must not lose program-owned inherited source references.
+        from utils.continuation import attach_context
+        attach_context(contract, self.task_dir)
         archive = Path(self.task_dir) / "revisions" / f"revision_{self.live_revision}"
         atomic_json(archive / "contract.json", self.structured_problem)
         atomic_json(archive / "trajectory.json", self._find_best_trajectory())
@@ -368,6 +390,7 @@ class SupervisorOrchestrator:
         print(f"[LiveUpdate] Applied revision {revision}: {len(items)} update(s); replanning")
         return True
 
+    @timed_stage('supervisor')
     def _resolve_dispatch(self, node: MCTSNode) -> Dict[str, Any]:
         """Ask the Supervisor LLM what to do next for this node, then figure
         out the target subtask, node type, and expansion count."""
@@ -395,15 +418,25 @@ class SupervisorOrchestrator:
         if default_subtask_id is None:
             return {"stop_search": True}
 
-        subtask_id = self._extract_requested_subtask_id(
-            supervisor_payload,
-            fallback=default_subtask_id,
-        )
+        requested_subtask_id = self._extract_requested_subtask_id(
+            supervisor_payload, fallback=default_subtask_id)
+        order = {int(s['id']): i for i, s in enumerate(self.subtasks)}
+        dispatch_adjusted = requested_subtask_id != default_subtask_id
+        dispatch_reason = ''
+        if dispatch_adjusted:
+            if order[requested_subtask_id] < order[default_subtask_id]:
+                dispatch_reason = ('当前分支此前子任务已验收，拒绝隐式回退重做；'
+                    f'模型建议 subtask {requested_subtask_id}，实际推进 subtask {default_subtask_id}。')
+            else:
+                dispatch_reason = ('当前分支的前置子任务尚未验收，不能跳过；'
+                    f'模型建议 subtask {requested_subtask_id}，实际处理 subtask {default_subtask_id}。')
+            print('[Supervisor] ' + dispatch_reason, flush=True)
+        subtask_id = default_subtask_id
         subtask = self._get_subtask_by_id(subtask_id) or self._get_subtask_by_id(default_subtask_id)
         if not subtask:
             return {"stop_search": True}
 
-        node_type = self._sanitize_node_type(supervisor_payload.get("node_type"), default_node_type)
+        node_type = default_node_type if dispatch_adjusted else self._sanitize_node_type(supervisor_payload.get("node_type"), default_node_type)
         expansion_count = self._get_expansion_count_by_node_type(node_type)
 
         description = str(
@@ -414,7 +447,15 @@ class SupervisorOrchestrator:
             or ""
         ).strip() or str(subtask.get("description", "")).strip()
 
+        if dispatch_adjusted:
+            # A suggestion for a different task must not leak into this task's instructions.
+            description = str(subtask.get('description', '')).strip()
+
         supervisor_dispatch = {
+            "dispatch_adjusted": dispatch_adjusted,
+            "dispatch_reason": dispatch_reason,
+            "requested_subtask_id": requested_subtask_id,
+            "actual_subtask_id": subtask_id,
             "node_type": node_type,
             "subtask_id": subtask["id"],
             "subtask": subtask,
@@ -431,6 +472,7 @@ class SupervisorOrchestrator:
         }
     
     
+    @timed_stage('promoter')
     def _call_promoter(self, node: MCTSNode) -> str:
         """Distill raw experience into compressed knowledge.
         The LLM reads the node's experience and evaluation,
@@ -509,6 +551,7 @@ class SupervisorOrchestrator:
         )
         return response
 
+    @timed_stage('critic')
     def _call_critic(self, node: MCTSNode) -> Dict[str, Any]:
         """Evaluate a Theoretician's output. Returns decision, verdict,
         reward score, and textual analysis."""
@@ -522,15 +565,30 @@ class SupervisorOrchestrator:
         code = node_output.get("code") or ""
         files = node_output.get("files") or []
 
+        from utils.review_evidence import collect_review_evidence
         context_str = json.dumps(
-            {"analysis": analysis, "code": code, "files": files},
+            {"analysis": analysis, "code": code, "files": files,
+             "primary_parameters":node_output.get('primary_parameters'),
+             "parameter_evidence":node_output.get('parameter_evidence'),
+             "primary_cases":node_output.get('primary_cases'),
+             "supplementary_cases":node_output.get('supplementary_cases'),
+             "numerical_results":node_output.get('numerical_results'),
+             "observed_file_evidence":collect_review_evidence(getattr(self,'task_dir',None),node)},
             ensure_ascii=False,
             indent=2,
         )
-        prompt = ("## Current authoritative contract\n"
+        from core.research_lifecycle import stage_contract
+        stage_scope = stage_contract(getattr(node, "subtask_payload", {}))
+        prompt = ("## Research stage scope\n" + json.dumps(stage_scope, ensure_ascii=False) + "\n## Current authoritative contract\n"
                   + json.dumps(self.structured_problem, ensure_ascii=False, indent=2)
+                  + "\n## Current node scope\n" + json.dumps(dict(subtask_id=node.subtask_id,
+                      subtask=getattr(node, 'subtask_payload', {}),description=getattr(node, 'subtask_description', '')),ensure_ascii=False)
+                  + "\nEvaluate THIS subtask; do not demand a later subtask's CSV/PDF from an earlier reasoning node. "
+                    "A final report node must verify its cited current-run sources. Hard parameters always apply.\n"
                   + "\nEvaluate compliance with the current contract and amendments.\n\n"
-                  + self.critic_prompt.format(result=core_results, context=context_str))
+                  + self.critic_prompt.format(result=core_results, context=context_str,
+                      accept_threshold=self.critic_settings['accept_threshold'],
+                      redraft_threshold=self.critic_settings['redraft_threshold']))
 
         # Round-dependent model: exploration phase uses flash, convergence phase uses v4-pro
         total_rounds = self.revision_round_budget
@@ -558,53 +616,37 @@ class SupervisorOrchestrator:
         if not isinstance(parsed, dict):
             parsed = {}
 
-        decision = str(parsed.get("decision", "to_revise")).strip().lower() or "to_revise"
-        if decision not in {"to_revise", "to_redraft", "complete"}:
-            decision = "to_revise"
-        verdict = str(parsed.get("verdict", "")).strip().lower()
-        if not verdict:
-            verdict = {
-                "complete": "accept",
-                "to_revise": "refine",
-                "to_redraft": "reject",
-            }.get(decision, "refine")
-        reward = self._extract_reward(parsed)
-        try:
-            reward_val = float(reward) if reward is not None else 0.0
-        except Exception:
-            reward_val = 0.0
+        # Modern clients may explicitly label the scientific score. Legacy reward
+        # remains accepted here; the composite is computed only after the audit.
+        if 'science_reward' in parsed:
+            parsed['reward'] = parsed['science_reward']
 
-        if self.update_inbox is None and node.node_type == "revise" and reward_val >= 0.75:
-            revise_count = sum(
-                1 for n in self.tree.get_all_nodes()
-                if n.subtask_id == node.subtask_id and n.node_type == "revise"
-            )
-            if revise_count >= 2:
-                decision = "complete"
-                verdict = "accept"
-                print(
-                    f"[Supervisor] Force-accept node {node.node_id} "
-                    f"(reward={reward_val:.3f}, revise_count={revise_count}, "
-                    f"subtask={node.subtask_id})",
-                    flush=True,
-                )
-
+        from utils.critic_policy import gate_evaluation
+        evaluation = gate_evaluation(parsed, self.critic_settings)
+        blocking = parsed.get('blocking_issues', ['Critic 未明确返回 blocking_issues，关键问题尚未核对'])
+        if not isinstance(blocking,list):blocking=['Critic blocking_issues 字段格式无效']
+        evaluation['review_valid'] = isinstance(parsed.get('blocking_issues'), list) and evaluation.get('decision_valid', True)
+        evaluation['research_stage'] = stage_scope['research_stage']
+        evaluation['blocking_issues']=blocking
+        if blocking:
+            decision='to_redraft' if evaluation['decision']=='to_redraft' else 'to_revise'
+            evaluation.update(decision=decision,verdict='reject' if decision=='to_redraft' else 'refine')
+            evaluation['policy_reason']='；'.join(filter(None,[evaluation.get('policy_reason'),
+                '存在未解决的关键评审问题或评审字段缺失，不能完成。']))
+        evaluation['decision_adjusted']=evaluation['decision']!=evaluation['model_decision']
         opinion = self._to_natural_text(parsed.get("opinion"))
         analysis_text = self._to_natural_text(parsed.get("analysis") or parsed.get("summary") or opinion)
-
-        reward = self._extract_reward(parsed)
-        opinion = self._to_natural_text(parsed.get("opinion"))
-        analysis_text = self._to_natural_text(parsed.get("analysis") or parsed.get("summary") or opinion)
+        if evaluation['policy_reason']:
+            analysis_text += '\n[Critic 阈值规则] ' + evaluation['policy_reason']
 
         return {
-            "decision": decision,
-            "verdict": verdict,
-            "reward": reward,
+            **evaluation,
             "opinion": opinion,
             "analysis": analysis_text,
             "code": code,
         }
 
+    @timed_stage('theoretician')
     def _expand_and_simulate_nodes(
         self,
         parent: MCTSNode,
@@ -652,6 +694,8 @@ class SupervisorOrchestrator:
             self.tree.add_node(child_node)
             parent.add_child(child_node)
             child_nodes.append(child_node)
+            from core.research_lifecycle import stage_for
+            child_node.research_stage = stage_for(subtask)
             self.monitor.node(child_node,"solving")
 
             # Step 2: Build context for this child (now parent's knowledge is visible)
@@ -678,6 +722,7 @@ class SupervisorOrchestrator:
                     "subtask_type": subtask_type,
                     "input": subtask.get("input"),
                     "expected_output": subtask.get("expected_output"),
+                    "research_stage": stage_for(subtask),
                 },
                 "task_dir": self.task_dir,
                 "hcc_context": hcc_context,
@@ -734,81 +779,20 @@ class SupervisorOrchestrator:
         # Step 4: Wait for all Theoretician workers to complete
         wait(futures)
 
-        # Step 5: Collect results and attach to nodes (后续逻辑完全不变)
-        outputs: List[Tuple[MCTSNode, Dict[str, Any]]] = []
-        for idx, future in enumerate(futures):
-            child_node = child_nodes[idx]
-
+        # Every returned attempt, including worker failures, enters the live controller.
+        from core.v93_pipeline import NodePipeline
+        pipeline = NodePipeline(self)
+        completed_nodes = []
+        for child_node, future, payload in zip(child_nodes, futures, payloads):
             try:
-                node_output = future.result()
-                child_node.experience = [{"step": "simulation", "content": node_output}]
-            except Exception as e:
-                child_node.status = "failed"
-                child_node.result = {"error": str(e)}
-                child_node.theoretician_output = child_node.result
-                child_node.evaluation = {
-                    "decision": "to_revise",
-                    "verdict": "refine",
-                    "reward": 0.0,
-                    "analysis": "Theoretician execution failed.",
-                    "opinion": str(e),
-                }
-                child_node.reward = 0.0
-                child_node.backpropagate(0.0)
-                self.monitor.node(child_node,"failed")
-                continue
-
-            child_node.result = node_output.get("result")
-            child_node.theoretician_output = node_output.get("result")
-            child_node.log_path = node_output.get("log_path")
-            outputs.append((child_node, node_output))
-            self.monitor.node(child_node,"evaluating",node_output.get("tool_calls",[]))
-
-        for child_node, node_output in outputs:
-            node_log = self.logger.get_node_logger(child_node.node_id) if self.logger else None
-            if node_log:
-                node_log.log_input(
-                    subtask_id=child_node.subtask_id,
-                    node_type=child_node.node_type,
-                    subtask_description=child_node.subtask_description,
-                    context=self.tree.get_context_for_node(child_node),
-                    prior_knowledge=self.prior_knowledge,
-                )
-                node_log.log_output(result=child_node.result)
-                for tc in node_output.get("tool_calls", []):
-                    node_log.log_tool_call(
-                        tool_name=tc.get("tool", ""),
-                        arguments=tc.get("arguments", {}),
-                        result=tc.get("result", ""),
-                    )
-
-            try:
-                evaluation = self._call_critic(child_node) or {}
-            except Exception:
-                evaluation = {}
-                print("[Critic] call failed.")
-            child_node.evaluation = evaluation
-            reward = self._extract_reward(evaluation)
-            child_node.reward = reward
-            self.monitor.node(child_node,"distilling")
-
-            child_node.knowledge = self._call_promoter(child_node)
-            child_node.is_compressed = True
-            child_node.experience = []
-
-            if node_log:
-                node_log.log_evaluation(evaluation, reward)
-                node_log.log_knowledge(child_node.knowledge)
-                node_log.save()
-
-            print(
-                f"[Critic] "
-                f"(node_id={child_node.node_id} subtask_id={child_node.subtask_id} node_type={child_node.node_type}) "
-                f"evaluation completed decision={evaluation.get('decision', '')} reward={reward} 🧪"
-            )
-            child_node.status = "completed"
-            child_node.backpropagate(reward)
-            self.monitor.node(child_node,"finished")
+                output = future.result()
+                if not isinstance(output, dict):
+                    raise ValueError('Worker returned no structured output')
+            except Exception as exc:
+                output = {'result': {'execution_error': type(exc).__name__ + ': ' + str(exc),
+                                     'delivery_status': 'failed'}, 'tool_calls': []}
+            completed_nodes.extend(pipeline.process(child_node, output, payload, subtask))
+        child_nodes = completed_nodes
 
         # Mark parent as expanded so future selection skips it
         if child_nodes:
@@ -818,7 +802,101 @@ class SupervisorOrchestrator:
 
         return child_nodes
 
+    def _finish_pipeline_node(self, child_node, node_output):
+        evaluation = child_node.evaluation
+        reward = child_node.reward
+        node_log = self.logger.get_node_logger(child_node.node_id) if self.logger else None
+        if node_log:
+            node_log.log_input(
+                subtask_id=child_node.subtask_id,
+                node_type=child_node.node_type,
+                subtask_description=child_node.subtask_description,
+                context=self.tree.get_context_for_node(child_node),
+                prior_knowledge=self.prior_knowledge,
+            )
+            node_log.log_output(result=child_node.result)
+            for tc in node_output.get("tool_calls", []):
+                node_log.log_tool_call(
+                    tool_name=tc.get("tool", ""),
+                    arguments=tc.get("arguments", {}),
+                    result=tc.get("result", ""),
+                )
+
+        self.monitor.node(child_node,"distilling")
+
+        try:
+            child_node.knowledge = self._call_promoter(child_node)
+        except Exception as exc:
+            # Knowledge distillation is auxiliary: retain completed evidence
+            # and review if its model request fails.
+            child_node.knowledge = '[知识整理失败；请查看节点成果和评审] ' + type(exc).__name__ + ': ' + str(exc)
+        if evaluation.get('decision') != 'complete':
+            child_node.knowledge = '[UNACCEPTED ATTEMPT — do not reuse as a verified conclusion]\n' + child_node.knowledge
+        child_node.is_compressed = True
+        child_node.experience = []
+
+        if node_log:
+            node_log.log_evaluation(evaluation, reward)
+            node_log.log_knowledge(child_node.knowledge)
+            node_log.save()
+
+        print(
+            f"[Critic] "
+            f"(node_id={child_node.node_id} subtask_id={child_node.subtask_id} node_type={child_node.node_type}) "
+            f"evaluation completed decision={evaluation.get('decision', '')} reward={reward} 🧪"
+        )
+        child_node.status = "completed"
+        child_node.backpropagate(reward)
+        self.monitor.node(child_node,"finished")
+
+
+    @timed_stage('repair')
+    def _execute_repair(self, parent, payload, attempt):
+        """Submit a real worker into a fresh node directory; retain failed attempts."""
+        global _GLOBAL_POOL
+        node_id = self.node_id_counter
+        self.node_id_counter += 1
+        subtask = dict(parent.subtask_payload)
+        node = MCTSNode(subtask_id=parent.subtask_id, subtask_payload=subtask,
+            node_id=node_id, node_type='revise', subtask_description=payload['subtask']['description'],
+            status='open', created_by='repair_agent')
+        node.repair_parent_id = parent.node_id
+        node.repair_attempt = attempt
+        node.repair_status = 'running'
+        node.selected_round = parent.selected_round
+        node.supervisor_dispatch = dict(parent.supervisor_dispatch or {})
+        node.supervisor_feedback = node.supervisor_dispatch
+        from core.research_lifecycle import stage_for
+        node.research_stage = stage_for(subtask)
+        self.tree.add_node(node)
+        parent.add_child(node)
+        payload['node_id'] = node_id
+        payload['depth'] = node.get_depth()
+        self.monitor.node(node, 'solving')
+        try:
+            try:
+                future = _GLOBAL_POOL.submit(run_theo_node, payload, self.config_path)
+            except BrokenProcessPool:
+                # A killed original worker must not make every subsequent repair fail.
+                _GLOBAL_POOL.shutdown(wait=False, cancel_futures=True)
+                _GLOBAL_POOL = ProcessPoolExecutor(max_workers=self.processes, mp_context=mp.get_context('spawn'))
+                future = _GLOBAL_POOL.submit(run_theo_node, payload, self.config_path)
+            output = future.result()
+            if not isinstance(output, dict):
+                raise ValueError('Repair worker returned no structured output')
+        except Exception as exc:
+            output = {'result': {'execution_error': type(exc).__name__ + ': ' + str(exc),
+                                  'delivery_status': 'failed'}, 'tool_calls': []}
+        return node, output
+
     # Tools
+    @timed_stage('integrity')
+    def _audit_node_result(self,node,subtask,tools,evaluation):
+        audit=audit_node(self.structured_problem,node.result,Path(self.task_dir)/f'node_{node.node_id}',subtask,tools)
+        from core.research_lifecycle import audit_stage
+        audit = audit_stage(subtask, audit, tools)
+        return enforce_audit(evaluation,audit)
+
     def _get_prior_retriever(self) -> Optional[Any]:
         """Lazy-init the prior retriever. Returns None if unavailable."""
         if PriorRetriever is None:
@@ -1095,10 +1173,17 @@ class SupervisorOrchestrator:
         candidates = [
             node
             for node in self.tree.get_all_nodes()
-            if node.node_type != "virtual" and node.status not in {"completed_closed", "failed"}
+            if node.node_type != "virtual" and node.is_leaf()
+            and node.status not in {"completed_closed", "completed_expended", "failed"}
         ]
         if not candidates:
             return None
+
+        # Preserve a coherent accepted prefix before exploring equivalent attempts.
+        # Scores alone cannot turn an unresolved prerequisite into progress.
+        progress = {n.node_id: self._accepted_prefix_length(self._get_path_nodes(n)) for n in candidates}
+        frontier = max(progress.values())
+        candidates = [n for n in candidates if progress[n.node_id] == frontier]
 
         def ucb(node: MCTSNode) -> float:
             if node.visits <= 0:
@@ -1114,6 +1199,15 @@ class SupervisorOrchestrator:
             key=lambda n: (ucb(n), n.get_depth(), -n.node_id),
         )
         return selected
+
+    def _accepted_prefix_length(self, path_nodes):
+        _, completed = self._count_completed_subtasks_in_path(path_nodes)
+        count = 0
+        for subtask in self.subtasks:
+            if int(subtask['id']) not in completed:
+                break
+            count += 1
+        return count
 
     def _apply_beam_pruning(self, depth: int):
         """Close low-reward nodes at the given depth when they exceed
@@ -1190,11 +1284,9 @@ class SupervisorOrchestrator:
                     {
                         "id": sid,
                         "subtask_type": str(item.get("subtask_type", "reasoning")).strip() or "reasoning",
+                        "research_stage": item.get("research_stage"),
                         "input": item.get("input", self.structured_problem.get("input", "")),
-                        "expected_output": item.get(
-                            "expected_output",
-                            self.structured_problem.get("expected_output", ""),
-                        ),
+                        "expected_output": item.get("expected_output", ""),
                         "description": description,
                     }
                 )
@@ -1234,14 +1326,7 @@ class SupervisorOrchestrator:
             return int(self.subtasks[0]["id"])
 
         current_subtask_id = int(node.subtask_id)
-        is_complete = decision == "complete" or node.is_subtask_complete()
-
-        # 新增：连续失败计数
-        fail_count = self._count_failures_for_subtask(current_subtask_id)
-        if self.update_inbox is None and fail_count >= 4:
-            print(f"[Supervisor] subtask {current_subtask_id} failed {fail_count} "
-              f"times, force-advancing to next")
-            is_complete = True   # 强制当成完成，跳到下一个
+        is_complete = node.is_subtask_complete()
 
         if is_complete:
             next_subtask = self._get_next_subtask(current_subtask_id)
@@ -1302,12 +1387,18 @@ class SupervisorOrchestrator:
         return float(sum(float(n.reward or 0.0) for n in path_nodes if n.node_type != "virtual"))
 
     def _count_completed_subtasks_in_path(self, path_nodes: List[MCTSNode]) -> Tuple[int, set[int]]:
-        completed: set[int] = set()
+        latest = {}
+        order={int(s['id']):i for i,s in enumerate(self.subtasks)}
         for node in path_nodes:
             if node.node_type == "virtual":
                 continue
-            if node.is_subtask_complete():
-                completed.add(int(node.subtask_id))
+            if int(node.subtask_id) not in order:continue
+            if int(node.subtask_id) in order:
+                latest={sid:n for sid,n in latest.items() if order[sid]<=order[int(node.subtask_id)]}
+            latest[int(node.subtask_id)] = node
+        expected = {int(s['id']) for s in self.subtasks}
+        completed = {sid for sid,node in latest.items() if sid in expected and node.is_subtask_complete()
+                     and (node.evaluation or {}).get('integrity_audit',{}).get('status')=='pass'}
         return len(completed), completed
 
     def _find_full_completion_path(self) -> Optional[List[MCTSNode]]:
@@ -1387,6 +1478,10 @@ class SupervisorOrchestrator:
                 "log_path": node.log_path,
                 "supervisor_dispatch": node.supervisor_dispatch,
                 "critic_feedback": node.evaluation,
+                "research_stage": getattr(node, "research_stage", None),
+                "repair_parent_id": getattr(node, "repair_parent_id", None),
+                "repair_attempt": getattr(node, "repair_attempt", 0),
+                "repair_status": getattr(node, "repair_status", None),
                 "theoretician_output": node.theoretician_output,
             }
             for node in path_nodes
@@ -1396,28 +1491,18 @@ class SupervisorOrchestrator:
     def _collect_completed_subtasks(self) -> List[Dict[str, Any]]:
         """Gather the best completed node per subtask across the entire tree."""
         best_by_subtask: Dict[int, MCTSNode] = {}
-        for node in self.tree.get_all_nodes():
+        path=self._find_best_path_nodes()
+        _,completed_ids=self._count_completed_subtasks_in_path(path)
+        for node in path:
             if node.node_type == "virtual" or not node.is_subtask_complete():
                 continue
             sid = int(node.subtask_id)
+            if sid not in completed_ids:continue
             prev = best_by_subtask.get(sid)
             if prev is None:
                 best_by_subtask[sid] = node
                 continue
-            rank_cur = (
-                node.reward,
-                node.get_reward_value(),
-                node.visits,
-                -node.node_id,
-            )
-            rank_prev = (
-                prev.reward,
-                prev.get_reward_value(),
-                prev.visits,
-                -prev.node_id,
-            )
-            if rank_cur > rank_prev:
-                best_by_subtask[sid] = node
+            best_by_subtask[sid] = node
 
         completed: List[Dict[str, Any]] = []
         for sid in sorted(best_by_subtask.keys()):
