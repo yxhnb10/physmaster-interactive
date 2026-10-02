@@ -24,7 +24,7 @@ class MonitorTests(unittest.TestCase):
                 result=None,evaluation=None,knowledge='')
             monitor.node(node,'solving')
             node.result={'core_results':'v(t) trajectory'}
-            (root/'node_1').mkdir();(root/'node_1/result.csv').write_text('v\n12\n')
+            (root/'node_1').mkdir(exist_ok=True);(root/'node_1/result.csv').write_text('v\n12\n')
             monitor.node(node,'evaluating',[{'tool':'Python_code_interpreter','arguments':{'code':'x'}}])
             self.assertEqual(list_rounds(root)[0]['nodes'][0]['stage'],'evaluating')
             node.evaluation={'decision':'to_revise','reward':.4,'opinion':'Missing heat constraint'}
@@ -42,7 +42,7 @@ class MonitorTests(unittest.TestCase):
 
     def test_round_api_file_download_and_traversal_rejection(self):
         with tempfile.TemporaryDirectory() as d:
-            root=Path(d);(root/'node_1').mkdir();(root/'node_1/result.csv').write_text('result')
+            root=Path(d);(root/'node_1').mkdir(exist_ok=True);(root/'node_1/result.csv').write_text('result')
             monitor=ResearchMonitor(root);monitor.start(0,0,{'description':'Goal'},0)
             ident='a'*32
             manager=SimpleNamespace(lock=threading.RLock(),token='test',_get=lambda i:{'task_dir':root})

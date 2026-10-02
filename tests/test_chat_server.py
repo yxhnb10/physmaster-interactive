@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import hashlib
 import shutil
 import sys
 import tempfile
@@ -17,7 +18,7 @@ sys.path.insert(0,str(ROOT))
 from web_server import TaskManager, make_handler
 from utils.live_updates import UpdateInbox, set_control
 
-FAKE_WORKER = '''import argparse,time,yaml
+FAKE_WORKER = '''import argparse,time,yaml,json
 from pathlib import Path
 from utils.live_updates import UpdateInbox
 from utils.runtime_timing import RunTimer, measure_operation
@@ -37,6 +38,7 @@ for round_index in range(14):
 inbox.close();timer.change('summary');time.sleep(0.1)
 (td/'summary.md').write_text('Mock summary, revision '+str(revision))
 timer.finish(True)
+(td/'completion.json').write_text(json.dumps({'status':'passed','stop_reason':'all_subtasks_completed','subtasks':[], 'artifacts':[], 'reasons':[]}))
 '''
 
 
@@ -50,6 +52,82 @@ def until(fn,timeout=6):
 
 
 class ChatServerTests(unittest.TestCase):
+    def test_v94_upgrade_recovers_legacy_v93_parent_chain(self):
+        first=self.manager.create('total mass 190 kg');self.finished(first)
+        (self.manager.jobs[first]['task_dir']/'first_model.py').write_text('TOTAL_MASS=190')
+        # Legacy v9.3 child has parent_id but no inherited snapshots.
+        second=self.manager.create('same research',original_query='total mass 190 kg',parent_id=first,
+            initial_messages=[dict(id='old',text='Add thermal analysis',status='included')])
+        self.finished(second)
+        (self.manager.jobs[second]['task_dir']/'second_data.csv').write_text('mass\n190')
+        third=self.manager.continue_task(second,'Validate opening')['id']
+        data=json.loads((self.manager.jobs[third]['task_dir']/'inheritance.json').read_text())
+        self.assertEqual([s['task_id'] for s in data['sources']],[first,second])
+        self.assertTrue(any(r['source_path']=='first_model.py' for r in data['files']))
+        self.assertTrue(any(r['source_path']=='second_data.csv' for r in data['files']))
+    def test_v94_snapshot_all_outputs_multigeneration_and_restart(self):
+        parent=self.manager.create('total mass 190 kg')
+        self.finished(parent)
+        folder=self.manager.jobs[parent]['task_dir']
+        (folder/'node_7').mkdir();(folder/'node_7/model.py').write_text('TOTAL_MASS=190\n')
+        (folder/'node_3').mkdir();(folder/'node_3/failed.json').write_text('{"reward":0}')
+        child=self.manager.continue_task(parent,'Add heat transfer')['id']
+        child_dir=self.manager.jobs[child]['task_dir']
+        manifest=json.loads((child_dir/'inheritance.json').read_text())
+        self.assertTrue(any(r['source_path']=='node_3/failed.json' for r in manifest['files']))
+        self.assertEqual((child_dir/'inherited'/parent/'node_7/model.py').read_text(),'TOTAL_MASS=190\n')
+        self.finished(child)
+        restored=TaskManager(self.root,self.root/'config.yaml')
+        try:
+            self.assertIn(child,restored.jobs)
+            grandchild=restored.continue_task(child,'Validate parachute')['id']
+            inherited=json.loads((restored.jobs[grandchild]['task_dir']/'inheritance.json').read_text())
+            self.assertEqual([s['task_id'] for s in inherited['sources']],[parent,child])
+            self.assertEqual(inherited['conditions'],['Add heat transfer','Validate parachute'])
+            self.assertEqual(restored.snapshot(grandchild)['hard_parameters'][0]['value'],190)
+        finally:
+            restored.close()
+            for job in restored.jobs.values():
+                if job['process'] is not None:job['process'].wait(timeout=10)
+
+    def test_v94_inheritance_http_download_hash_and_invalid_input(self):
+        parent=self.manager.create('total mass 190 kg');self.finished(parent)
+        old=self.manager.jobs[parent]['task_dir'];(old/'model.py').write_text('TOTAL_MASS=190\n')
+        child=self.manager.continue_task(parent,'Add thermal model')['id']
+        server=ThreadingHTTPServer(('127.0.0.1',0),make_handler(self.manager))
+        thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
+        url='http://127.0.0.1:'+str(server.server_port)+'/api/tasks/'+child
+        try:
+            with urllib.request.urlopen(url+'/inheritance?query=model.py') as response:inventory=json.load(response)
+            self.assertTrue(inventory['inherited']);self.assertEqual(len(inventory['files']),1)
+            row=inventory['files'][0]
+            with urllib.request.urlopen(url+'/inherited-file?file_id='+row['file_id']) as response:
+                self.assertEqual(response.read(),b'TOTAL_MASS=190\n')
+            with self.assertRaises(urllib.error.HTTPError) as error:urllib.request.urlopen(url+'/inheritance?offset=bad')
+            self.assertEqual(error.exception.code,409)
+            (self.manager.jobs[child]['task_dir']/row['snapshot_path']).write_text('changed')
+            with self.assertRaises(urllib.error.HTTPError) as error:urllib.request.urlopen(url+'/inherited-file?file_id='+row['file_id'])
+            self.assertEqual(error.exception.code,409)
+        finally:
+            server.shutdown();server.server_close();thread.join(timeout=3)
+
+    def test_v9_continuation_carries_manifest_for_revalidation_not_inherited_acceptance(self):
+        ident=self.manager.create('total mass is 190 kg')
+        until(lambda:self.manager.snapshot(ident)['state']=='finished')
+        folder=self.manager.jobs[ident]['task_dir']
+        manifest={'status':'passed','accepted_nodes':[1], 'artifacts':[dict(path='model.py',sha256='synthetic-digest',source='node_1/model.py')]}
+        (folder/'final_manifest.json').write_text(json.dumps(manifest))
+        original=(folder/'summary.md').read_bytes()
+        child=self.manager.continue_task(ident,'Add a thermal constraint')['id']
+        snapshot=self.manager.snapshot(child)
+        prompt=(self.manager.jobs[child]['task_dir'].parent/'query.txt').read_text(encoding='utf-8')
+        self.assertIn('synthetic-digest',prompt)
+        self.assertIn('不能直接继承验收',prompt)
+        self.assertIn('未恢复旧进程或旧 MCTS 树',prompt)
+        self.assertEqual(snapshot['hard_parameters'][0]['value'],190)
+        self.assertIsNone(snapshot['completion_report'])
+        self.assertEqual((folder/'summary.md').read_bytes(),original)
+
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory()
         self.root=Path(self.tmp.name)
@@ -65,7 +143,7 @@ class ChatServerTests(unittest.TestCase):
         for job in self.manager.jobs.values():
             if job['process'] is not None:
                 job['process'].wait(timeout=10)
-        until(lambda:all(j['state'] in ('finished','failed') for j in self.manager.jobs.values()))
+        until(lambda:all(j['state'] in ('finished','partial','failed') for j in self.manager.jobs.values()))
         self.tmp.cleanup()
 
     def test_early_message_pause_batch_resume_and_final_receipt(self):
@@ -296,6 +374,52 @@ class ChatServerTests(unittest.TestCase):
         self.assertIsNone(restored['elapsed_seconds'])
         self.assertFalse(restored['available'])
 
+    def test_hard_parameters_inherit_user_input_not_old_summary(self):
+        with self.assertRaises(ValueError):self.manager.create('总质量190 kg','wrong capabilities')
+        with self.assertRaises(ValueError):self.manager.create('总质量190 kg',hard_parameter_text='total_mass = 210 kg')
+        self.assertFalse(self.manager.jobs)
+        ident=self.manager.create('总质量190 kg',hard_parameter_text='nose_radius = 0.5 m')
+        job=self.manager.jobs[ident]
+        config=yaml.safe_load((job['task_dir'].parent/'web_config.yaml').read_text())
+        self.assertEqual(config['integrity']['hard_parameters'][0]['value'],190)
+        self.finished(ident)
+        (job['task_dir']/'summary.md').write_text('Old TPS result: mass=210 kg')
+        child=self.manager.continue_task(ident,'重新评估热防护')['id']
+        values={p['name']:p['value'] for p in self.manager.snapshot(child)['hard_parameters']}
+        self.assertEqual(values,{'total_mass':190,'nose_radius':.5})
+        self.finished(child)
+        current=self.manager.snapshot(child)
+        changed=self.manager.continue_task(child,'总质量改为200 kg',hard_parameter_text=current['hard_parameter_text'])['id']
+        self.assertEqual({p['name']:p['value'] for p in self.manager.snapshot(changed)['hard_parameters']},
+                         {'total_mass':200,'nose_radius':.5})
+        self.finished(changed)
+        restored=TaskManager(self.root,self.root/'config.yaml')
+        self.assertEqual(restored.snapshot(changed)['hard_parameters'],self.manager.snapshot(changed)['hard_parameters'])
+
+    def test_normal_exit_without_completion_report_is_partial(self):
+        worker='\n'.join(line for line in FAKE_WORKER.splitlines() if 'completion.json' not in line)
+        (self.root/'run.py').write_text(worker)
+        ident=self.manager.create('research not fully checked')
+        until(lambda:self.manager.snapshot(ident)['state']=='partial')
+        saved=self.manager.snapshot(ident)
+        self.assertTrue(saved['summary_available']);self.assertEqual(saved['exit_code'],0)
+        self.assertIsNone(saved['completion_report'])
+        self.manager=TaskManager(self.root,self.root/'config.yaml')
+        self.assertEqual(self.manager.snapshot(ident)['state'],'partial')
+        child=self.manager.continue_task(ident,'finish missing analysis')['id']
+        until(lambda:self.manager.snapshot(child)['state']=='partial')
+
+    def test_runtime_mass_amendment_changes_only_after_receipt(self):
+        ident=self.manager.create('总质量190 kg')
+        self.manager.control(ident,'pause')
+        until(lambda:self.manager.snapshot(ident)['state']=='paused')
+        self.manager.update(ident,'总质量改为200 kg')
+        self.assertEqual(self.manager.snapshot(ident)['hard_parameters'][0]['value'],190)
+        self.manager.control(ident,'resume')
+        until(lambda:self.manager.snapshot(ident)['messages'][0]['status']=='applied')
+        self.assertEqual(self.manager.snapshot(ident)['hard_parameters'][0]['value'],200)
+        self.finished(ident)
+
     def test_http_security_validation_and_start(self):
         server=ThreadingHTTPServer(('127.0.0.1',0),make_handler(self.manager))
         thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
@@ -317,6 +441,16 @@ class ChatServerTests(unittest.TestCase):
             with urllib.request.urlopen(url+'/api/tasks/'+ident) as response:
                 self.assertEqual(json.load(response)['query'],'x')
             self.finished(ident)
+            td=self.manager.jobs[ident]['task_dir']
+            (td/'results.csv').write_bytes(b'h,n\n87,5\n')
+            report=json.loads((td/'completion.json').read_text())
+            report['artifacts']=[dict(path='results.csv',status='available',sha256=hashlib.sha256((td/'results.csv').read_bytes()).hexdigest())]
+            (td/'completion.json').write_text(json.dumps(report))
+            download=url+'/api/tasks/'+ident+'/artifact?path=results.csv'
+            with urllib.request.urlopen(download) as response:self.assertIn(b'87,5',response.read())
+            (td/'results.csv').write_bytes(b'changed after audit')
+            with self.assertRaises(urllib.error.HTTPError) as exc:urllib.request.urlopen(download)
+            self.assertEqual(exc.exception.code,409)
             with urllib.request.urlopen(url+'/api/tasks/'+ident+'/summary?format=md') as response:
                 self.assertIn('attachment;', response.headers['Content-Disposition'])
                 self.assertTrue(response.headers['Content-Type'].startswith('text/markdown'))

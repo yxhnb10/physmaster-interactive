@@ -19,7 +19,8 @@ def load_theoretician():
     # Network clients are replaced; the actual tool-selection and invocation code runs.
     with patch.dict(sys.modules, {
         'LANDAU.library': SimpleNamespace(LibraryRetriever=Mock()),
-        'utils.llm_client': SimpleNamespace(call_model=Mock(return_value='test result')),
+        'utils.llm_client': SimpleNamespace(call_model=Mock(return_value='test result'),
+            LLMResponseError=type('LLMResponseError', (RuntimeError,), {})),
     }):
         spec.loader.exec_module(module)
     return module

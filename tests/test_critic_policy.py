@@ -42,7 +42,7 @@ class CriticPolicyTests(unittest.TestCase):
         source = ast.parse((ROOT/'core/supervisor.py').read_text())
         cls = next(n for n in source.body if isinstance(n, ast.ClassDef))
         method = next(n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name=='_call_critic')
-        call_model = Mock(return_value=json.dumps({'decision':'complete','reward':.88,'opinion':'review'}))
+        call_model = Mock(return_value=json.dumps({'decision':'complete','reward':.88,'opinion':'review','blocking_issues':[]}))
         scope = dict(MCTSNode=object, Dict=dict, Any=object, json=json, call_model=call_model, timed_stage=timed_stage)
         exec(compile(ast.Module(body=[method],type_ignores=[]),'<actual critic integration>','exec'),scope)
         supervisor = SimpleNamespace(structured_problem={'task':'check model'},
@@ -62,6 +62,22 @@ class CriticPolicyTests(unittest.TestCase):
         self.assertEqual(scope['_call_critic'](supervisor,node)['decision'],'complete')
         call_model.return_value=json.dumps({'decision':'to_revise','reward':.99})
         self.assertEqual(scope['_call_critic'](supervisor,node)['decision'],'to_revise')
+        call_model.return_value=json.dumps({'decision':'complete','reward':.99})
+        self.assertEqual(scope['_call_critic'](supervisor,node)['decision'],'to_revise')
+        call_model.return_value=json.dumps({'decision':'complete','reward':.99,
+            'blocking_issues':['Wall temperature correction lacks a valid reference.']})
+        reviewed=scope['_call_critic'](supervisor,node)
+        self.assertEqual(reviewed['decision'],'to_revise')
+        self.assertTrue(reviewed['blocking_issues'])
+        self.assertTrue(reviewed['decision_adjusted'])
+        for model_decision,score,blocking in [('to_redraft',0,None),('to_redraft',.99,['unresolved']),('complete',0,['unresolved'])]:
+            response={'decision':model_decision,'reward':score}
+            if blocking is not None:response['blocking_issues']=blocking
+            call_model.return_value=json.dumps(response)
+            reviewed=scope['_call_critic'](supervisor,node)
+            self.assertEqual(reviewed['decision'],'to_redraft')
+            self.assertEqual(reviewed['verdict'],'reject')
+            self.assertEqual(reviewed['decision_adjusted'],model_decision!='to_redraft')
 
     def test_retrieval_threshold_keeps_boundary_and_can_reject_all(self):
         spec=importlib.util.spec_from_file_location('testable_retrieval_critic',ROOT/'core/retrieval_critic.py')
