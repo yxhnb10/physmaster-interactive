@@ -23,8 +23,21 @@ def classify_failure(result, evaluation, tools=None):
         reasons = audit.get('issues', []) + audit.get('unchecked', [])
         artifact_failure = any('文件' in str(x) or '交付' in str(x) for x in reasons)
         return outcome('ARTIFACT_FAILURE' if artifact_failure else 'INTEGRITY_FAILURE', reasons)
-    if ev.get('critic_error') or ev.get('score_valid') is not True or ev.get('review_valid') is False:
+    # Material defects take precedence even when the same review also has a citation error.
+    substantive = [x for x in ev.get('blocking_issue_details', []) if x.get('category') != 'review_protocol']
+    if substantive:
+        if ev.get('repair_route') == 'report_repair':
+            return dict(kind='REPORT_FAILURE', reasons=[x['detail'] for x in substantive], action='report_repair')
+        return outcome('REVIEW_FAILURE', [x['detail'] for x in substantive])
+    if ev.get('acceptance_state') == 'review_pending':
+        return outcome('CRITIC_FAILURE', ev.get('review_pending_reasons') or
+            (ev.get('scientific_review') or {}).get('errors') or ['评审协议或证据读取尚未完成'])
+    if (ev.get('critic_error') or ev.get('review_valid') is False
+            or ev.get('score_valid') is not True and ev.get('science_assessable') is not False):
         return outcome('CRITIC_FAILURE', [ev.get('critic_error') or '评审缺少有效评分或明确的关键问题字段'])
+    if ev.get('science_assessable') is False:
+        return outcome('REVIEW_FAILURE', ev.get('blocking_issues') or
+                       [ev.get('science_assessment_reason') or '科学内容缺少可评估证据，需补足研究成果'])
     if ev.get('decision') != 'complete' or ev.get('blocking_issues'):
         return outcome('REVIEW_FAILURE', ev.get('blocking_issues') or [ev.get('policy_reason') or ev.get('opinion') or '科学评审要求修订'])
     return outcome('NONE', [])

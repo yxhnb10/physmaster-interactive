@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><script id="phyThemeInit">/* PHY_THEME_V962: run before styles to avoid a bright flash on dark reload. */
+(()=>{'use strict';
+const key='physmaster-appearance-v1';let mode='system';
+try{const saved=localStorage.getItem(key);if(['system','light','dark'].includes(saved))mode=saved;}catch{}
+let media=null;try{media=typeof matchMedia==='function'?matchMedia('(prefers-color-scheme: dark)'):null;}catch{}
+const root=document.documentElement;
+function apply(value){mode=['system','light','dark'].includes(value)?value:'system';const actual=mode==='system'?(media?.matches?'dark':'light'):mode;root.dataset.phyTheme=actual;root.dataset.phyThemeMode=mode;root.style.colorScheme=actual;return actual;}
+apply(mode);
+window.PhysMasterAppearance={version:'v9.6.2-dark-mode-1',key,media,apply,getMode:()=>mode};
+})();
+</script><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="physmaster-token" content="__TOKEN__"><meta name="auth-page" content="__AUTH_PAGE__">
+<title>登录 · PhysMaster</title><link rel="stylesheet" href="/auth.css"><script src="/auth.js" defer></script>
+<style id="phyThemeStyle">/* PHY_THEME_V962: scoped surfaces; scientific images keep their original colors. */
+.phy-theme-control{display:inline-flex;align-items:center;gap:8px;margin:0;font-size:12px;white-space:nowrap;color:inherit}
+body.workspace-v961 .phy-theme-control select,.phy-theme-control select{width:auto;min-width:104px;max-width:150px;margin:0;padding:6px 9px;border:1px solid #dce3ed;border-radius:7px;background:#f9fbfe;color:#526886;font:inherit}
+.phy-theme-login{display:flex;justify-content:flex-end;margin:0 0 20px}
+.phy-theme-sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
+#webSourceSettings label,#webBudgetSettings label{display:block;font-size:13px;margin:12px 0 8px}
+#webBudgetSettings input{display:block;width:180px;margin-top:7px}
+#webSourceSettings textarea{margin-top:8px}
+@media(max-width:1200px){body.workspace-v961 header{height:auto;min-height:78px;flex-wrap:wrap;padding-top:14px;padding-bottom:14px}}
+@media(max-width:600px){body.workspace-v961 .phy-theme-control{font-size:12px}body.workspace-v961 .phy-theme-control select{min-width:100px;font-size:12px}}
+:root[data-phy-theme=light]{color-scheme:light}
+:root[data-phy-theme=dark]{color-scheme:dark;background:#111827;--ink:#e5edf8;--muted:#aebcd0;--line:#334155;--blue:#a5c3ff;--soft:#152030;--green:#83dfb7;--amber:#f4ce8d;--phy-bg:#111827;--phy-surface:#1b2535;--phy-inset:#152030;--phy-text:#e5edf8;--phy-muted:#aebcd0;--phy-border:#334155}
+:root[data-phy-theme=dark] body,:root[data-phy-theme=dark] body.workspace-v961{--ink:#e5edf8;--muted:#aebcd0;--line:#334155;--blue:#a5c3ff;--soft:#152030;--green:#83dfb7;--amber:#f4ce8d;background:var(--phy-bg);color:var(--phy-text)}
+:root[data-phy-theme=dark] body main:not(.research-workspace),:root[data-phy-theme=dark] body.workspace-v961 header,:root[data-phy-theme=dark] body.workspace-v961 .card,:root[data-phy-theme=dark] body.workspace-v961 .workspace-tabs,:root[data-phy-theme=dark] body.workspace-v961 .node-card,:root[data-phy-theme=dark] body.workspace-v961 .node-card-header,:root[data-phy-theme=dark] body.workspace-v961 .research-web-panel,:root[data-phy-theme=dark] body.workspace-v961 .message,:root[data-phy-theme=dark] body.workspace-v961 .round-metric,:root[data-phy-theme=dark] body.workspace-v961 .welcome-steps>div{background:var(--phy-surface);border-color:var(--phy-border);color:var(--phy-text);box-shadow:none}
+:root[data-phy-theme=dark] body.workspace-v961 .settings-dialog{background:var(--phy-surface);color:var(--phy-text);border-color:var(--phy-border);box-shadow:0 24px 80px #0007}
+:root[data-phy-theme=dark] body.workspace-v961 .workspace-sidebar,:root[data-phy-theme=dark] body.workspace-v961 .node-body,:root[data-phy-theme=dark] body.workspace-v961 .node-details,:root[data-phy-theme=dark] body.workspace-v961 .messages,:root[data-phy-theme=dark] body.workspace-v961 .node-audit,:root[data-phy-theme=dark] body.workspace-v961 .score-dimension,:root[data-phy-theme=dark] body.workspace-v961 .node-filters,:root[data-phy-theme=dark] body.workspace-v961 #roundNavigationHint,:root[data-phy-theme=dark] body.workspace-v961 .research-web-panel>summary,:root[data-phy-theme=dark] body.workspace-v961 .timing-table th{background:var(--phy-inset);color:var(--phy-muted);border-color:var(--phy-border)}
+:root[data-phy-theme=dark] body input:not([type=checkbox]),:root[data-phy-theme=dark] body textarea,:root[data-phy-theme=dark] body select,:root[data-phy-theme=dark] body.workspace-v961 input:not([type=checkbox]),:root[data-phy-theme=dark] body.workspace-v961 textarea,:root[data-phy-theme=dark] body.workspace-v961 select{background:var(--phy-inset);color:var(--phy-text);border-color:#475569}
+:root[data-phy-theme=dark] body input::placeholder,:root[data-phy-theme=dark] body textarea::placeholder{color:#94a3b8}
+:root[data-phy-theme=dark] body input[type=checkbox]{accent-color:#86a8ff}
+:root[data-phy-theme=dark] body input:focus,:root[data-phy-theme=dark] body textarea:focus,:root[data-phy-theme=dark] body select:focus{outline-color:#7ba0ef;border-color:#8eb2ff}
+:root[data-phy-theme=dark] body :focus-visible{outline-color:#8eb2ff}
+:root[data-phy-theme=dark] body button,:root[data-phy-theme=dark] body.workspace-v961 button,:root[data-phy-theme=dark] body.workspace-v961 .download,:root[data-phy-theme=dark] body.workspace-v961 #start{background:#416bd0;color:#fff;border-color:#416bd0}
+:root[data-phy-theme=dark] body button:hover:not(:disabled),:root[data-phy-theme=dark] body.workspace-v961 button:hover:not(:disabled),:root[data-phy-theme=dark] body.workspace-v961 .download:hover{background:#4e79e2;color:#fff;box-shadow:none}
+:root[data-phy-theme=dark] body.workspace-v961 button.secondary,:root[data-phy-theme=dark] body.workspace-v961 .runtime-shortcut{background:#243249;color:var(--phy-text);border-color:#475569}
+:root[data-phy-theme=dark] body.workspace-v961 button.secondary:hover:not(:disabled){background:#30425f;border-color:#6780a3}
+:root[data-phy-theme=dark] body.workspace-v961 #newTask,:root[data-phy-theme=dark] body.workspace-v961 .workspace-tab[aria-selected=true]{background:#273c5e;color:#c5d8ff;border-color:#425b81}
+:root[data-phy-theme=dark] body.workspace-v961 .workspace-tab{background:transparent;color:var(--phy-muted);border-color:transparent}
+:root[data-phy-theme=dark] body.workspace-v961 .workspace-tab:hover:not(:disabled){background:#24344c;color:var(--phy-text)}
+:root[data-phy-theme=dark] body.workspace-v961 .workspace-tab[aria-selected=true]:hover{background:#304c75;color:#dce7ff}
+:root[data-phy-theme=dark] body.workspace-v961 .query-tools button{background:none;color:#b7ceff;border:0}
+:root[data-phy-theme=dark] body a{color:#adc9ff}
+:root[data-phy-theme=dark] body.workspace-v961 .brand-mark,:root[data-phy-theme=dark] body .logo{background:#30496f;color:#eaf2ff}
+:root[data-phy-theme=dark] body.workspace-v961 h1,:root[data-phy-theme=dark] body.workspace-v961 h2,:root[data-phy-theme=dark] body.workspace-v961 h3,:root[data-phy-theme=dark] body.workspace-v961 h4,:root[data-phy-theme=dark] body.workspace-v961 #memberName,:root[data-phy-theme=dark] body.workspace-v961 #researchIdentity,:root[data-phy-theme=dark] body.workspace-v961 .stats strong,:root[data-phy-theme=dark] body.workspace-v961 .node-score strong,:root[data-phy-theme=dark] body.workspace-v961 .node-panel h4,:root[data-phy-theme=dark] body.workspace-v961 .scientific-check strong{color:var(--phy-text)}
+:root[data-phy-theme=dark] body p,:root[data-phy-theme=dark] body.workspace-v961 .muted,:root[data-phy-theme=dark] body.workspace-v961 .brand p,:root[data-phy-theme=dark] body.workspace-v961 .brand h1 span,:root[data-phy-theme=dark] body.workspace-v961 .eyebrow,:root[data-phy-theme=dark] body.workspace-v961 #teamStatus,:root[data-phy-theme=dark] body.workspace-v961 footer,:root[data-phy-theme=dark] body.workspace-v961 .task-team-actions,:root[data-phy-theme=dark] body.workspace-v961 .node-toggle,:root[data-phy-theme=dark] body.workspace-v961 .node-subtitle,:root[data-phy-theme=dark] body.workspace-v961 .node-brief,:root[data-phy-theme=dark] body.workspace-v961 .node-score small,:root[data-phy-theme=dark] body.workspace-v961 .node-text,:root[data-phy-theme=dark] body.workspace-v961 .node-evidence,:root[data-phy-theme=dark] body.workspace-v961 .artifact-origin,:root[data-phy-theme=dark] body.workspace-v961 .panel-note,:root[data-phy-theme=dark] body.workspace-v961 .score-dimension span,:root[data-phy-theme=dark] body.workspace-v961 .score-dimension small,:root[data-phy-theme=dark] body.workspace-v961 .message .meta,:root[data-phy-theme=dark] body.workspace-v961 .research-web-event small,:root[data-phy-theme=dark] body.workspace-v961 .research-web-body>p,:root[data-phy-theme=dark] body.workspace-v961 .stats small,:root[data-phy-theme=dark] body.workspace-v961 .budget-legend,:root[data-phy-theme=dark] body.workspace-v961 #runtimeMessage,:root[data-phy-theme=dark] body.workspace-v961 .dialog-message,:root[data-phy-theme=dark] body.workspace-v961 .delete-key{color:var(--phy-muted)}
+:root[data-phy-theme=dark] body.workspace-v961 .field-label,:root[data-phy-theme=dark] body.workspace-v961 .settings-fold>summary,:root[data-phy-theme=dark] body.workspace-v961 details>summary,:root[data-phy-theme=dark] body.workspace-v961 #runtimeDialog label,:root[data-phy-theme=dark] body.workspace-v961 .chat-help,:root[data-phy-theme=dark] body.workspace-v961 .history-scope,:root[data-phy-theme=dark] body.workspace-v961 .node-filters>span,:root[data-phy-theme=dark] body.workspace-v961 .research-stage,:root[data-phy-theme=dark] body.workspace-v961 .node-issues{color:var(--phy-muted)}
+:root[data-phy-theme=dark] body.workspace-v961 .capability{background:#202d42;color:var(--phy-text);border-color:var(--phy-border)}
+:root[data-phy-theme=dark] body.workspace-v961 .acceptance-note{background:#223147;border-color:#405372}
+:root[data-phy-theme=dark] body.workspace-v961 .acceptance-note p,:root[data-phy-theme=dark] body.workspace-v961 .acceptance-note h4,:root[data-phy-theme=dark] body.workspace-v961 .acceptance-summary{color:#b7c9e5}
+:root[data-phy-theme=dark] body.workspace-v961 .badge,:root[data-phy-theme=dark] body.workspace-v961 .node-pill.stage-pill,:root[data-phy-theme=dark] body.workspace-v961 .node-file{background:#263c5b;color:#c2d7ff;border-color:#425b81}
+:root[data-phy-theme=dark] body.workspace-v961 .node-pill{background:#2a374b;color:#c2ccdc}
+:root[data-phy-theme=dark] body.workspace-v961 .round-goal,:root[data-phy-theme=dark] body.workspace-v961 .node-pill.pass{background:#18392f;color:#9ce4c3;border-color:#346450}
+:root[data-phy-theme=dark] body.workspace-v961 .decision-note,:root[data-phy-theme=dark] body.workspace-v961 .repair-panel,:root[data-phy-theme=dark] body.workspace-v961 .repair-summary,:root[data-phy-theme=dark] body.workspace-v961 .node-pill.warn,:root[data-phy-theme=dark] body.workspace-v961 .node-pill.repair-pill,:root[data-phy-theme=dark] body.workspace-v961 .session-expired,:root[data-phy-theme=dark] body.workspace-v961 #runControl .v96-alert,:root[data-phy-theme=dark] body.workspace-v961 #v96BudgetAlert{background:#3b3020;color:#f4ce8d;border-color:#665032}
+:root[data-phy-theme=dark] body.workspace-v961 .decision-note h4,:root[data-phy-theme=dark] body.workspace-v961 .decision-note .node-text,:root[data-phy-theme=dark] body.workspace-v961 .decision-note .panel-note,:root[data-phy-theme=dark] body.workspace-v961 .repair-panel h4,:root[data-phy-theme=dark] body.workspace-v961 .node-failures p,:root[data-phy-theme=dark] body.workspace-v961 .acceptance-summary[data-state=blocked],:root[data-phy-theme=dark] body.workspace-v961 .v96-alert p{color:#f4ce8d}
+:root[data-phy-theme=dark] body.workspace-v961 .node-pill.fail{background:#40262b;color:#ffaaa3}
+:root[data-phy-theme=dark] body #error{color:#ffaaa3}
+:root[data-phy-theme=dark] body.workspace-v961 .score-track{background:#334155}
+:root[data-phy-theme=dark] body.workspace-v961 .score-fill{background:#86a8ff}
+:root[data-phy-theme=dark] body.workspace-v961 .node-score.low .score-fill{background:#e5b970}
+:root[data-phy-theme=dark] body.workspace-v961 .research-stage.present{color:#b7ceff;border-color:#86a8ff}
+:root[data-phy-theme=dark] body.workspace-v961 pre,:root[data-phy-theme=dark] body.workspace-v961 #summary,:root[data-phy-theme=dark] body.workspace-v961 .summary-document pre,:root[data-phy-theme=dark] body.workspace-v961 .summary-document code,:root[data-phy-theme=dark] body.workspace-v961 .translated-view pre,:root[data-phy-theme=dark] body.workspace-v961 .translated-view code{background:#101b2b;color:#dce8fa;border-color:var(--phy-border)}
+:root[data-phy-theme=dark] body.workspace-v961 .summary-document,:root[data-phy-theme=dark] body.workspace-v961 .translated-view{color:var(--phy-text)}
+:root[data-phy-theme=dark] body.workspace-v961 .translation-toolbar{background:var(--phy-surface);border-color:var(--phy-border);color:var(--phy-text)}
+:root[data-phy-theme=dark] body.workspace-v961 .translation-toolbar small{color:var(--phy-muted)}
+:root[data-phy-theme=dark] body.workspace-v961 .translated-view{background:var(--phy-inset);border-color:#86a8ff}
+:root[data-phy-theme=dark] body.workspace-v961 .summary-document p,:root[data-phy-theme=dark] body.workspace-v961 .translated-view p{color:var(--phy-text)}
+:root[data-phy-theme=dark] body.workspace-v961 #summaryMarkup .math-fallback{background:#3b3020;color:#f4ce8d}
+:root[data-phy-theme=dark] body.workspace-v961 .summary-math-controls,:root[data-phy-theme=dark] body.workspace-v961 .translation-controls{color:var(--phy-muted)}
+:root[data-phy-theme=dark] body.workspace-v961 .research-welcome{background:linear-gradient(180deg,#202d42,#1b2535);color:var(--phy-text)}
+:root[data-phy-theme=dark] body.workspace-v961 .welcome-steps strong{color:var(--phy-text)}
+:root[data-phy-theme=dark] body.workspace-v961 .welcome-steps small,:root[data-phy-theme=dark] body.workspace-v961 .welcome-steps span{color:var(--phy-muted)}
+:root[data-phy-theme=dark] body.workspace-v961 td,:root[data-phy-theme=dark] body.workspace-v961 th,:root[data-phy-theme=dark] body.workspace-v961 #runControl td,:root[data-phy-theme=dark] body.workspace-v961 #runControl th,:root[data-phy-theme=dark] body.workspace-v961 .node-details,:root[data-phy-theme=dark] body.workspace-v961 .scientific-check,:root[data-phy-theme=dark] body.workspace-v961 .model-overrides,:root[data-phy-theme=dark] body.workspace-v961 .session-details,:root[data-phy-theme=dark] body.workspace-v961 .connection-status,:root[data-phy-theme=dark] body.workspace-v961 .overview-main{border-color:var(--phy-border)}
+:root[data-phy-theme=dark] body.workspace-v961 .node-expander>summary:hover{background:#24344c}
+:root[data-phy-theme=dark] body.workspace-v961 .workspace-backdrop{background:#0009}
+:root[data-phy-theme=dark] body.workspace-v961 dialog::backdrop{background:#0009}
+:root[data-phy-theme=dark] body *{scrollbar-color:#60718c transparent}
+</style></head>
+<body>
+<main class="auth-shell">
+  <aside class="story" aria-label="PhysMaster 小组研究工作台">
+    <a class="brand" href="/login"><span class="brand-icon" aria-hidden="true">P</span><span>PhysMaster<span class="brand-sub">小组研究工作台</span></span></a>
+    <div class="story-copy"><span class="eyebrow">THINK · TEST · REFINE</span><h1>把一个问题，<br>研究到更清楚。</h1><p>从建立模型到验证结论，保留每一步成果，<br class="desktop-break">与组员一起继续探索。</p></div>
+    <div class="research-preview" aria-hidden="true"><div class="preview-top"><span class="live-dot"></span> 研究的每一步都有迹可循<span class="preview-dots">•••</span></div><div class="preview-track"><span>提出问题</span><i></i><span>建立模型</span><i></i><span>验证结果</span></div><div class="preview-output"><div class="output-mark">✓</div><div><strong>成果与证据一起保存</strong><small>模型 · 计算 · 评审 · 下一步</small></div><span class="output-arrow">↗</span></div></div>
+    <div class="story-bottom"><span>个人 API 配置</span><span>增量续研</span><span>成果共享</span></div>
+  </aside>
+  <section class="entry" aria-labelledby="pageTitle">
+    <span class="entry-caption">你的研究，从这里继续</span>
+    <nav class="auth-tabs" aria-label="账号入口"><button id="tabLogin" type="button" aria-pressed="true">登录</button><button id="tabRegister" type="button" aria-pressed="false">注册</button></nav>
+    <h2 id="pageTitle" tabindex="-1">欢迎回来</h2><p id="pageDescription" class="description">登录你的账号，继续未完成的研究。</p>
+    <form id="login" novalidate>
+      <label for="username">用户名</label><input id="username" name="username" autocomplete="username" minlength="2" maxlength="32" required placeholder="输入你的用户名" autocapitalize="none" spellcheck="false">
+      <div class="label-row"><label for="password">密码</label><button class="text-button" id="forgotOpen" type="button">忘记密码？</button></div><div class="password-field"><input id="password" name="password" type="password" autocomplete="current-password" maxlength="200" required placeholder="输入密码"><button type="button" class="reveal" data-target="password" aria-label="显示登录密码" aria-pressed="false">显示</button></div>
+      <label class="check-label"><input id="remember" type="checkbox"> 在此设备保持登录 7 天</label><p class="field-note">共享设备请勿勾选；未勾选时登录有效期为 12 小时。</p>
+      <button id="submit" class="primary" type="submit">进入工作台 <span aria-hidden="true">↗</span></button>
+    </form>
+    <form id="register" hidden novalidate>
+      <label for="registerUsername">用户名</label><input id="registerUsername" name="username" autocomplete="username" minlength="2" maxlength="32" required placeholder="2～32 位字母、数字、_ 或 -" autocapitalize="none" spellcheck="false">
+      <label for="inviteCode">邀请码</label><input id="inviteCode" name="invite_code" autocomplete="off" maxlength="80" required placeholder="由小组管理员提供" spellcheck="false"><p class="field-note">本工作台仅对受邀请的组员开放，最多 3 个账号。</p>
+      <label for="registerPassword">设置密码</label><div class="password-field"><input id="registerPassword" name="password" type="password" autocomplete="new-password" minlength="10" maxlength="200" required placeholder="至少 10 个字符"><button type="button" class="reveal" data-target="registerPassword" aria-label="显示注册密码" aria-pressed="false">显示</button></div><p id="passwordLength" class="field-note" aria-live="polite">推荐使用较长且不重复的密码。</p>
+      <label for="registerConfirm">确认密码</label><div class="password-field"><input id="registerConfirm" name="confirm_password" type="password" autocomplete="new-password" minlength="10" maxlength="200" required placeholder="再输入一次密码"><button type="button" class="reveal" data-target="registerConfirm" aria-label="显示确认密码" aria-pressed="false">显示</button></div>
+      <button id="registerSubmit" class="primary" type="submit">创建账号 <span aria-hidden="true">↗</span></button>
+      <p class="field-note">注册后登录，再设置你自己的模型 API。注册不会启动研究或调用模型。</p>
+    </form>
+    <section id="forgot" hidden aria-label="找回密码"><div class="recovery-note"><strong>联系小组管理员</strong><p>请让管理员在工作台的“成员管理”中为你的账号生成一次性密码重置链接。打开链接后，你可以自行设置新密码。</p><p>管理员本人忘记密码时，可在服务器电脑上使用账号管理工具恢复。</p></div><button id="showReset" class="secondary" type="button">我已有重置码</button><button id="forgotBack" class="text-button back" type="button">返回登录</button></section>
+    <form id="reset" hidden novalidate>
+      <label for="resetCode">密码重置码</label><input id="resetCode" autocomplete="off" maxlength="80" required placeholder="使用管理员提供的一次性重置码" spellcheck="false">
+      <label for="resetPassword">新密码</label><div class="password-field"><input id="resetPassword" type="password" autocomplete="new-password" minlength="10" maxlength="200" required placeholder="至少 10 个字符"><button type="button" class="reveal" data-target="resetPassword" aria-label="显示新密码" aria-pressed="false">显示</button></div>
+      <label for="resetConfirm">确认新密码</label><div class="password-field"><input id="resetConfirm" type="password" autocomplete="new-password" minlength="10" maxlength="200" required placeholder="再输入一次新密码"><button type="button" class="reveal" data-target="resetConfirm" aria-label="显示新密码确认" aria-pressed="false">显示</button></div>
+      <button id="resetSubmit" class="primary" type="submit">保存新密码</button><button id="resetBack" type="button" class="text-button back">返回登录</button><p class="field-note">成功后旧密码和所有旧登录会话失效，研究文件和 API 配置保留。</p>
+    </form>
+    <p id="capsWarning" class="field-note warning" hidden>大写锁定已开启，请注意密码大小写。</p><p id="error" class="message" role="alert" aria-live="polite"></p><p id="success" class="message success" role="status" aria-live="polite"></p>
+    <p id="seatStatus" class="availability">正在读取小组注册状态…</p><footer>基于 PhysMaster 的非官方交互扩展<br>仅限小组成员使用</footer>
+  </section>
+</main>
+<noscript><p class="no-script">注册和登录需要 JavaScript，请启用后刷新页面。</p></noscript>
+<script id="phyThemeBoot">/* PHY_THEME_V962: local appearance only, never calls an API. */
+(()=>{'use strict';const state=window.PhysMasterAppearance;if(!state||document.getElementById('phyThemeSelect'))return;
+const wrapper=document.createElement('label');wrapper.className='phy-theme-control';wrapper.htmlFor='phyThemeSelect';wrapper.append(document.createTextNode('外观'));
+const select=document.createElement('select');select.id='phyThemeSelect';select.setAttribute('aria-label','网页外观');select.title='此浏览器记住外观选择；跟随系统会自动响应系统主题变化。';
+for(const [value,text] of [['system','跟随系统'],['light','浅色'],['dark','深色']]){const option=document.createElement('option');option.value=value;option.textContent=text;select.append(option);}wrapper.append(select);
+const team=document.getElementById('teamBar');if(team)team.append(wrapper);else{wrapper.classList.add('phy-theme-login');document.querySelector('main')?.prepend(wrapper);}
+const notice=document.createElement('span');notice.className='phy-theme-sr';notice.setAttribute('role','status');notice.setAttribute('aria-live','polite');wrapper.append(notice);
+function sync(){select.value=state.getMode();notice.textContent='当前网页使用'+(document.documentElement.dataset.phyTheme==='dark'?'深色':'浅色')+'外观';}
+select.addEventListener('change',()=>{state.apply(select.value);sync();try{localStorage.setItem(state.key,state.getMode());select.title='外观选择已保存到此浏览器。';}catch{select.title='浏览器阻止保存；本页外观已切换，刷新后可能恢复默认。';notice.textContent+='；浏览器阻止保存选择';}});
+const systemChanged=()=>{if(state.getMode()==='system'){state.apply('system');sync();}};
+if(state.media?.addEventListener)state.media.addEventListener('change',systemChanged);else state.media?.addListener?.(systemChanged);
+window.addEventListener('storage',event=>{if(event.storageArea&&event.storageArea!==localStorage)return;if(event.key===state.key||event.key===null){state.apply(['system','light','dark'].includes(event.newValue)?event.newValue:'system');sync();}});
+sync();const footer=document.querySelector('footer');if(footer)footer.textContent=footer.textContent.replace('v9.6.1','v9.6.2');
+})();
+</script></body></html>

@@ -21,8 +21,20 @@ Subtask decomposition requirements:
 - If the task is simple, return exactly one subtask.
 
 - User-locked numerical parameters are immutable unless the user explicitly
-  changes them in a later amendment. Added equipment does not authorize an
-  increase to a stated total mass. Record unsupported feasibility as unresolved.
-- Preserve explicit required filenames and include an executable final analysis
-  and delivery subtask when a report is required. Do not invent numeric tolerances
+  changes them in a later amendment. New components or methods do not authorize
+  changes to locked system totals or boundary conditions. Record unsupported feasibility as unresolved.
+- Preserve explicit required filenames and report formats. Add a final analysis
+  and delivery subtask only when the task requires it; do not force code execution
+  or a PDF on a reasoning or literature task. Do not invent numeric tolerances
   or replace missing inputs with guessed values presented as user requirements.
+
+
+v9.5 model provenance and scope:
+Separate user-given facts, derived quantities, assumptions and adopted objectives.
+When information does not determine a unique solution, provide explicit conditional
+models/bounds when useful; do not turn a chosen assumption into an authoritative fact.
+Specify the time horizon and whether maxima refer to one common state or different
+times. Energy accounting alone does not prove a dynamically achievable allocation.
+Keep each parameter's mathematical definition consistent with its physical meaning
+and limiting cases. Do not impose another task's parameter values, filenames or tests.
+Final artifacts must retain the adopted model version and actual validation scope.

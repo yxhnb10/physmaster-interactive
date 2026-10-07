@@ -1,0 +1,36 @@
+tests/test_complete_dashboard.cjs
+PASS: actual workspace tabs, keyboard navigation and visibility.
+PASS: five dimensions, actual stage, chain outcome, review retries and lifecycle evidence.
+PASS: stage/status filters and navigable repair links.
+PASS: repair payloads remain escaped text and page has no DOM runtime errors.
+
+tests/test_inheritance_dashboard_v94.cjs
+PASS: inherited history, original acceptance, context/copy/read distinctions and verified download link.
+PASS: inherited file pagination and search call the actual endpoint.
+PASS: old paths and usage reasons are rendered as escaped text.
+PASS: late inherited responses cannot leak across tasks.
+
+tests/test_round_dashboard.cjs
+PASS: four node panels, valid zero vs unscored, pending and legacy states, acceptance and mean, downloads, collapsed raw records.
+PASS: native node fold/unfold, default compact headers, polling preserves both detail levels, panel scroll, task scroll and focus.
+PASS: disagreement reasons distinguish thresholds, audited file violations, unchecked evidence and invalid scores; absent reasons are not guessed.
+PASS: model outputs and Critic text remain escaped plain text.
+PASS: switching rounds resets the task scroller and handles empty node/round history.
+PASS: execution failures and non-JSON output are not displayed as accepted numerical results.
+PASS: late responses from a previous task cannot overwrite the selected task.
+Round dashboard DOM verification passed (7 groups, including path-correction display). No live LLM calls.
+
+tests/test_round_history_fix.cjs
+PASS: previous/next navigation really displays saved earlier rounds and records pinned selection.
+PASS: polling/new rounds preserve the historic round and leave native menu options intact.
+PASS: transient incomplete responses retain already-read history rather than forcing latest.
+PASS: navigation resets hiding filters and explicit follow-latest resumes live updates.
+PASS: per-task preferences restore on reload and histories never leak between tasks.
+PASS: legacy records with round only remain navigable.
+
+tests/test_v9_dashboard.cjs
+PASS: dimensions, science-based decision reasons, composite search reward and independent acceptance.
+PASS: missing evidence never displays a fallback zero as a valid composite score.
+PASS: actual-stage timeline and published artifact labels.
+PASS: provenance, supplementary files, final manifest download and report-attempt status.
+PASS: all new fields remain plain text; no runtime DOM errors.

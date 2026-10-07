@@ -18,6 +18,10 @@ def stage_for(subtask):
     if explicit in STAGES:
         return explicit
     description = str(subtask.get('description', ''))
+    # Generic continuation policy mentions models/validation for all tasks;
+    # those words must not change a pure derivation into a validation stage.
+    if description.startswith('INCREMENTAL CONTINUATION:') and '\n' in description:
+        description=description.split('\n',1)[1]
     text = description + ' ' + json.dumps(subtask.get('expected_output', ''), ensure_ascii=False)
     if 'REPORT FINALIZATION ONLY' in description or re.search(r'报告|report|\.pdf\b', text, re.I):
         # A simulation which also creates a report must still execute its code.
@@ -46,15 +50,8 @@ def audit_stage(subtask, audit, tools):
     """Require only current-scope files now; global deliverables gate completion."""
     from pathlib import PureWindowsPath
     audit = dict(audit, issues=list(audit.get('issues', [])), unchecked=list(audit.get('unchecked', [])))
-    expected = (subtask or {}).get('expected_output') or []
-    names = []
-    if isinstance(expected, list):
-        for item in expected:
-            raw = item.get('path') if isinstance(item, dict) else item
-            if isinstance(raw, str):
-                names.extend(re.findall(r'[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*\.(?:pdf|csv|py|md|txt|html|json|png|svg|xlsx)\b', raw, re.I))
-    elif isinstance(expected, str):
-        names = re.findall(r'[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*\.(?:pdf|csv|py|md|txt|html|json|png|svg|xlsx)\b', expected, re.I)
+    from utils.node_delivery import required_file_names
+    names = required_file_names((subtask or {}).get('expected_output'))
     verified = {PureWindowsPath(x['path']).name for x in audit.get('artifact_checks', []) if x.get('sha256')}
     for name in sorted(set(names) - verified):
         audit['issues'].append('当前子任务要求的文件未核对：' + name)

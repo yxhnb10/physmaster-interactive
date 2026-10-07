@@ -1,4 +1,6 @@
+from utils.run_observer import monitored, attach_client, sdk_retries
 import json
+import os
 import traceback
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
@@ -59,6 +61,9 @@ def _load_llm_config(config_path: str | Path | None = None) -> Dict[str, Any]:
     if not isinstance(llm_config, dict):
         raise ValueError("`llm` section in config.yaml must be a mapping.")
 
+    if llm_config.get('api_key_env'):
+        variable = str(llm_config['api_key_env'])
+        llm_config = dict(llm_config, api_key=os.environ.get(variable, ''))
     missing = [key for key in ("base_url", "api_key", "model") if not llm_config.get(key)]
     if missing:
         raise ValueError(f"Missing llm config fields: {', '.join(missing)}")
@@ -78,8 +83,10 @@ class LLMClient:
             api_key=str(llm_config["api_key"]),
             base_url=str(llm_config["base_url"]),
             timeout=float(llm_config.get("timeout", 120)),
-            max_retries=3,
+            max_retries=sdk_retries(config_path or Path(__file__).resolve().parents[1] / 'config.yaml'),
         )
+
+        self.client = attach_client(self.client, config_path or Path(__file__).resolve().parents[1] / 'config.yaml')
 
     def _resolve_model(self, role: Optional[str], explicit: Optional[str]) -> str:
         if explicit:
@@ -88,6 +95,7 @@ class LLMClient:
             return self.model_overrides[role]
         return self.model
 
+    @monitored()
     def call_without_tools(
         self,
         system_prompt: str,
@@ -115,6 +123,7 @@ class LLMClient:
         print(f"[LLM] (no tools) done dt={dt:.1f}s", flush=True)
         return _final_text(completion.choices[0], actual_model, 1)
 
+    @monitored()
     def call_with_tools(
         self,
         system_prompt,
@@ -124,6 +133,7 @@ class LLMClient:
         model_name=None,
         role: Optional[str] = None,
         max_tool_calls: int = 8,
+        interaction_policy: dict | None = None,
     ) -> str:
         # Legacy name: this limits model rounds, not the number of tool calls.
         # Reserve the last round for delivery without adding to the API budget.
@@ -138,12 +148,18 @@ class LLMClient:
             {"role": "user", "content": user_prompt},
         ]
 
+        delivery_retry_used = False
         for iteration in range(max_tool_calls):
             final_round = iteration == max_tool_calls - 1
+            if interaction_policy is not None:
+                from utils.solver_budget import checkpoint, checkpoint_prompt
+                progress = checkpoint(interaction_policy, iteration, max_tool_calls)
+                if iteration > 0 and not final_round:
+                    messages.append({'role': 'user', 'content': checkpoint_prompt(progress, interaction_policy)})
             if final_round:
                 messages.append({"role": "user", "content": FINAL_RESPONSE_PROMPT})
             t_llm = time.time()
-            print(f"[LLM] iter={iteration} model={model_name or self.model}", flush=True)
+            print(f"[LLM] iter={iteration} role={role} model={actual_model}", flush=True)
             with measure_operation('llm:' + (role or 'default')):
                 completion = self.client.chat.completions.create(
                     model=actual_model,
@@ -161,6 +177,19 @@ class LLMClient:
             # treat truncated/empty content as a successful final answer.
             if final_round or not msg.tool_calls:
                 response = _final_text(completion.choices[0], actual_model, iteration + 1)
+                if interaction_policy is not None and not final_round and not delivery_retry_used and max_tool_calls-iteration-1>=2:
+                    from utils.solver_budget import needs_delivery_resume
+                    if needs_delivery_resume(response, interaction_policy):
+                        delivery_retry_used = True
+                        messages.append({'role':'assistant','content':response})
+                        messages.append({'role':'user','content':
+                            'The returned attempt has not declared the required current-node outputs, and tool-enabled '
+                            'budget remains. Use this one delivery correction opportunity now: persist a complete '
+                            'revision, perform scoped checks and return actual file/parameter evidence. Existing disk '
+                            'files must be explicitly declared and audited; do not invent execution or fabricate files. '
+                            'If a genuine blocker prevents completion, report it honestly. This uses the existing budget.'})
+                        print('[LLM] one in-budget delivery correction opportunity',flush=True)
+                        continue
                 print(f"[LLM] done total={time.time()-t0:.1f}s", flush=True)
                 return response
             if completion.choices[0].finish_reason == "length":
@@ -182,6 +211,9 @@ class LLMClient:
                     for tc in (msg.tool_calls or [])
                 ] or None,
             })
+
+            if getattr(msg, 'reasoning_content', None) is not None:
+                messages[-1]['reasoning_content'] = msg.reasoning_content
 
             tool_call_list = msg.tool_calls or []
             for tc in tool_call_list:
@@ -247,6 +279,7 @@ def call_model(
     role: Optional[str] = None,
     max_tool_calls: int = 8,
     config_path: str | Path | None = None,
+    interaction_policy: dict | None = None,
 ) -> str:
     """Convenience function for an LLM call with tool support."""
     client = _get_default_client(config_path=config_path)
@@ -258,4 +291,5 @@ def call_model(
         model_name=model_name,
         role=role,
         max_tool_calls=max_tool_calls,
+        interaction_policy=interaction_policy,
     )

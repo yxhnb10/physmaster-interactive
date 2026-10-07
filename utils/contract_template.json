@@ -119,7 +119,14 @@
               "Code",
               "CSV",
               "Image",
-              "Text"
+              "Text",
+              "DOCX",
+              "TSV",
+              "JSON",
+              "Markdown",
+              "HTML",
+              "XLSX",
+              "SVG"
             ]
           },
           "path": {

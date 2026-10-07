@@ -10,13 +10,15 @@ import re
 import shutil
 import uuid
 from pathlib import Path, PureWindowsPath
-from utils.live_updates import atomic_json
+from utils.live_updates import atomic_json, atomic_text
 from utils.hard_parameters import NUMBER, same_value
 
 RESERVED = {'summary.md', 'contract.json', 'completion.json', 'runtime.json', 'task.json',
             'web_config.yaml', 'config.yaml', 'final_manifest.json', 'manifest.json',
             'artifact_manifest.json', 'finalization.json', 'trajectory.json', 'delivery_index.md'}
-EXTENSIONS = {'.py', '.pdf', '.csv', '.md', '.txt', '.html', '.json', '.png', '.svg', '.jpg', '.xlsx'}
+EXTENSIONS = {'.py', '.pdf', '.csv', '.tsv', '.md', '.txt', '.html', '.json', '.png', '.svg', '.jpg', '.jpeg', '.xlsx', '.docx'}
+FILE_NAME_PATTERN = (r'[A-Za-z0-9_\-\u4e00-\u9fff]+(?:\.[A-Za-z0-9_\-\u4e00-\u9fff]+)*\.(?:'
+                     + '|'.join(sorted(x[1:] for x in EXTENSIONS)) + r')\b')
 
 
 def expected_artifacts(contract, task_dir):
@@ -32,7 +34,7 @@ def expected_artifacts(contract, task_dir):
             if header:explicit_block=True
             elif line.strip() and not in_list:explicit_block=False
             if (header or in_list or re.search(r'生成|produce|generate|create',line,re.I)) and not re.search(r'do not|不要|禁止',line,re.I):
-                for name in re.findall(r'[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*\.(?:pdf|csv|py|md|txt|html|json|png|svg|xlsx)\b',line,re.I):
+                for name in re.findall(FILE_NAME_PATTERN,line,re.I):
                     items.append(dict(path=name,format=Path(name).suffix[1:].upper(),description='Explicit user deliverable'))
                 if re.search(r'(?:generate|produce|create|生成|制作|输出)[^\n]{0,60}\bPDF\b',line,re.I) and not any(str(x.get('path','')).lower().endswith('.pdf') for x in items if isinstance(x,dict)):
                     items.append(dict(path='research_report.pdf',format='PDF',description='User-requested PDF report'))
@@ -130,17 +132,23 @@ def _file_hash(path):
 def text_parameter_conflicts(text, params):
     issues = []
     for p in params:
-        if p['name'] != 'total_mass':
-            continue
         for line in text.splitlines():
             line=line.replace('\\(','').replace('\\)','').replace('\\mathrm{kg}','kg')
             # Clearly labeled rejected/extra cases are permitted, not primary answers.
             if re.search(r'supplementary|sensitivity|rejected|incorrect|old reference|旧结果|旧参数|敏感性|额外情景|错误值|禁止', line, re.I):
                 continue
-            pattern = r'(?:total[_ ]mass|mass|总质量|\bm)\s*(?:=|:|：|为|取|is)?\s*(' + NUMBER + r')\s*(kg|千克|公斤)'
-            for match in re.finditer(pattern, line, re.I):
+            names=r'total[_ ]mass|system[_ ]mass|总质量' if p['name']=='total_mass' else re.escape(p['name'])
+            units=[p['unit']]
+            from utils.hard_parameters import UNITS
+            if p['unit'] in UNITS:
+                units.extend(u for u,v in UNITS.items() if v[0]==UNITS[p['unit']][0])
+            unit_pattern='|'.join(re.escape(u) for u in sorted(set(units),key=len,reverse=True) if u)
+            pattern=(r'(?<![\w])(?:'+names+r')\s*(?:=|:|：|为|取|is\b)?\s*('
+                     +NUMBER+r')\s*('+unit_pattern+r')(?![\w/])') if unit_pattern else (
+                     r'(?<![\w])(?:'+names+r')\s*(?:=|:|：|为|取|is\b)\s*('+NUMBER+r')()')
+            for match in re.finditer(pattern, line, re.I if p['name']=='total_mass' else 0):
                 if not same_value(p, {'value':float(match[1]), 'unit':match[2]}):
-                    issues.append(f"主结果文本与锁定总质量冲突：{match[1]} {match[2]}；要求 {p['value']:g} {p['unit']}")
+                    issues.append(f"主结果文本与锁定参数 {p['name']} 冲突：{match[1]} {match[2]}；要求 {p['value']:g} {p['unit']}")
     return list(dict.fromkeys(issues))
 
 
@@ -311,10 +319,20 @@ def _valid_artifact(path):
                 if not len(document.pages):return 'PDF 没有可读取页面'
             except (PdfReadError,KeyError,TypeError,IndexError) as exc:return 'PDF 无法解析：'+str(exc)
         elif path.suffix.lower()=='.py':ast.parse(path.read_text(encoding='utf-8'))
-        elif path.suffix.lower()=='.csv':
+        elif path.suffix.lower() in ('.csv','.tsv'):
             with path.open(encoding='utf-8-sig',newline='') as stream:
-                reader=csv.reader(stream)
+                reader=csv.reader(stream,delimiter='\t' if path.suffix.lower()=='.tsv' else ',')
                 if not next(reader,[]) or not next(reader,[]):return 'CSV 缺少表头或数据行'
+        elif path.suffix.lower()=='.docx':
+            import zipfile
+            from xml.etree import ElementTree
+            try:
+                with zipfile.ZipFile(path) as document:
+                    for part in ('[Content_Types].xml','word/document.xml'):
+                        if document.getinfo(part).file_size>8*1024*1024:return 'DOCX 主 XML 超出基础核对大小限制'
+                        ElementTree.fromstring(document.read(part))
+            except (zipfile.BadZipFile,KeyError,ElementTree.ParseError,RuntimeError) as exc:
+                return 'DOCX 无法解析：'+str(exc)
         elif path.suffix.lower()=='.json':json.loads(path.read_text(encoding='utf-8-sig'))
         return None
     except (OSError,ValueError,SyntaxError,UnicodeError,csv.Error) as exc:return str(exc)
@@ -425,18 +443,34 @@ def complete_run(contract, trajectory, task_dir, stop_reason):
 
 def finalize_summary(path, report):
     text=Path(path).read_text(encoding='utf-8')
+    generation_path=Path(path).parent/'summary_generation.json'
+    try:generation=json.loads(generation_path.read_text(encoding='utf-8'))
+    except (OSError,ValueError):generation=None
+    if generation:
+        report['summary_generation']=generation
+        if generation.get('status')!='generated':
+            report['status']='partial'
+            reason='总结生成未成功；程序进展说明不能替代最终科学总结'
+            if reason not in report['reasons']:report['reasons'].append(reason)
     conflicts=text_parameter_conflicts(text,report['hard_parameters'])
     if conflicts:
         report['status']='partial';report['reasons'].extend(conflicts)
     lines=['# Summary', '', '## 程序核对记录', '', '**'+('研究通过（模型评审与基础程序核对）' if report['status']=='passed' else '部分完成，结果尚未全部通过核对')+'**',
            '', '停止原因：`'+report['stop_reason']+'`。', '']
+    consistency=report.get('final_consistency')
+    if consistency:
+        lines.extend(['- 文件交付：'+str(report.get('delivery_status','未记录'))+'。',
+                      '- 节点评审：'+str(report.get('node_review_status','未记录'))+'。',
+                      '- 最终一致性：'+str(consistency.get('status','unchecked'))+'。',
+                      '- 结论性质：'+str(consistency.get('claim_scope','not_assessed'))+'。'])
+        for note in consistency.get('limitations',[]):lines.append('- 验证范围／限制：'+note)
     for reason in report['reasons']:lines.append('- '+reason)
     for p in report['hard_parameters']:lines.append(f"- 用户锁定参数：`{p['name']} = {p['value']:g} {p['unit']}`。")
     for artifact in report['artifacts']:
         lines.append('- 交付文件：`'+artifact['path']+'` — '+artifact['status']+
                      ('；来源 `'+artifact['source']+'`' if artifact['source'] else ''))
     lines.extend(['','上述检查不等同于实验验证或物理正确性证明。','','---','',text.removeprefix('# Summary').lstrip()])
-    Path(path).write_text('\n'.join(lines),encoding='utf-8')
+    atomic_text(path,'\n'.join(lines))
     atomic_json(Path(path).parent/'completion.json',report)
     # Keep publication status aligned if the summary introduced a parameter conflict.
     for manifest_path in (Path(path).parent/'final_manifest.json',Path(path).parent/'final'/'manifest.json'):

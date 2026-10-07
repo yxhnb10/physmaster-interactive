@@ -18,12 +18,24 @@ class FinalizationAgent:
     def run(self, contract, result, report, supervisor):
         record = dict(schema_version=1, state='skipped', attempts=[], reason='',
                       scope='只补最终报告交付；不会替代科学评审或重新运行整项研究')
+        from utils.research_monitor import safe_read
+        if getattr(supervisor,'recovering',False):
+            old=safe_read(self.root/'finalization.json')
+            if isinstance(old,dict): record=old
         def save(): atomic_json(self.root/'finalization.json', record)
+        from utils.review_routing import pending_review
+        pending = [n for n in supervisor.tree.get_all_nodes() if pending_review(n)]
+        if result.get('stop_reason') == 'review_pending':
+            record.update(state='review_pending', reason='原成果等待重新评审；报告补交不能绕过评审读取或协议失败')
+            save(); return result, report
         if not self.enabled or self.max_attempts == 0:
             record['reason']='配置关闭了额外的报告整理节点'; save(); return result, report
         states = report.get('subtasks') or []
         subtasks = getattr(supervisor, 'subtasks', [])
         if not isinstance(subtasks, list): subtasks=[]
+        if subtasks and any(n.is_leaf() and int(n.subtask_id)==int(subtasks[-1]['id']) for n in pending):
+            record.update(state='review_pending', reason='报告节点等待重新评审；保留原文件，不创建替代报告节点')
+            save(); return result, report
         missing = [a for a in report.get('artifacts',[]) if a['status'] != 'available']
         eligible = (len(states)>1 and len(subtasks)==len(states)
                     and all(s['status']=='passed' for s in states[:-1])
@@ -37,7 +49,12 @@ class FinalizationAgent:
         parent=supervisor.tree.get_node(base_id)
         if parent is None:
             record.update(state='skipped',reason='无法定位本次已验收的前置分支'); save(); return result,report
-        for attempt in range(self.max_attempts):
+        used_rounds={a['round_index'] for a in record['attempts'] if 'round_index' in a}
+        if getattr(supervisor,'recovering',False):
+            used_rounds.update(n.selected_round for n in supervisor.tree.get_all_nodes()
+                if (n.supervisor_dispatch or {}).get('phase')=='finalization'
+                and n.status!='open' and not getattr(n,'recovery_interrupted',False))
+        for attempt in range(len(used_rounds),self.max_attempts):
             if parent.status=='completed_closed' and parent.is_subtask_complete():
                 parent.status='completed'  # Reopen only the selected accepted prerequisite.
             task=dict(subtasks[-1], research_stage='FINALIZATION')
@@ -68,7 +85,13 @@ class FinalizationAgent:
                         completed_subtasks=supervisor._collect_completed_subtasks(),tree_stats=supervisor.tree.get_tree_stats())
             report=complete_run(contract,result['trajectory'],self.root,result.get('stop_reason','unknown'))
             save()
+            if hasattr(supervisor,'save_recovery'):supervisor.save_recovery(result=result)
             if report['status']=='passed': break
+            if any(pending_review(n) for n in nodes):
+                record.update(state='review_pending', reason='报告评审尚未完成；停止追加整理节点')
+                result['stop_reason'] = 'review_pending'
+                result['finalization'] = record
+                save(); return result, report
             parent=nodes[-1]
         record.update(state='passed' if report['status']=='passed' else 'partial',
                       reason='整理后的文件已通过普通 Critic 与程序核对' if report['status']=='passed' else '补交未通过，保留原始核对问题')

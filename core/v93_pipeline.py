@@ -13,6 +13,8 @@ from utils.critic_policy import gate_evaluation
 from utils.failure_classifier import classify_failure
 from utils.node_scores import score_node
 from utils.research_integrity import normalize_node_paths
+from utils.research_integrity import _file_hash, _node_file, enforce_audit
+from utils.review_routing import route_review
 
 
 class NodePipeline:
@@ -32,13 +34,17 @@ class NodePipeline:
             except Exception as exc:
                 evaluation = gate_evaluation({}, owner.critic_settings)
                 evaluation['critic_error'] = type(exc).__name__ + ': ' + str(exc)
-            valid = evaluation.get('score_valid') is True and evaluation.get('review_valid') is not False and not evaluation.get('critic_error')
+            assessed = evaluation.get('score_valid') is True or evaluation.get('science_assessable') is False
+            valid = assessed and evaluation.get('review_valid') is not False and not evaluation.get('critic_error')
             history.append(dict(attempt=attempt + 1, started_at=started, finished_at=time.time(),
                                 valid=valid, error=evaluation.get('critic_error'), evaluation=dict(evaluation)))
             node.review_history = history
             if valid or attempt == limit:
                 break
             node.evaluation = evaluation
+            node.review_retry_feedback = dict(errors=(evaluation.get('scientific_review') or {}).get('errors', []),
+                unread_reports=evaluation.get('review_pending_reasons', []), critic_error=evaluation.get('critic_error'),
+                blockers=evaluation.get('blocking_issues', []))
             owner.monitor.node(node, 'reevaluating')
         evaluation['review_attempts'] = history
         return evaluation
@@ -50,20 +56,48 @@ class NodePipeline:
         while True:
             node.research_stage = stage_for(subtask)
             node.repair_attempt = attempt
-            node.pipeline_version = 'v9.3-complete'
+            node.pipeline_version = 'v9.5.3-review-routing'
             node.theoretician_output = output.get('result')
             node.result, corrections = normalize_node_paths(owner.structured_problem, node.theoretician_output,
                                                            Path(owner.task_dir) / f'node_{node.node_id}')
             node.log_path = output.get('log_path')
             tools = output.get('tool_calls', [])
-            self.artifacts.record_node(node.node_id, node.result, {})
+            node.current_tool_calls = tools
+            initial_manifest = self.artifacts.record_node(node.node_id, node.result, {})
             owner.monitor.node(node, 'evaluating', tools)
             evaluation = self._review(node)
             evaluation = owner._audit_node_result(node, subtask, tools, evaluation)
+            # Re-review is read-only. Changed bytes cannot be accepted under an old result.
+            changed = []
+            for record in initial_manifest.get('artifacts', []):
+                if not record.get('sha256'):
+                    continue
+                try:
+                    source = _node_file(owner.task_dir, record['path'])
+                    if _file_hash(source) != record['sha256']:
+                        changed.append(record['path'])
+                except (OSError, ValueError, TypeError):
+                    changed.append(record['path'])
+            if changed:
+                audit = dict(evaluation.get('integrity_audit') or {})
+                audit.setdefault('unchecked', [])
+                audit.setdefault('checks', [])
+                audit.setdefault('artifact_checks', [])
+                audit.update(status='violation', issues=list(audit.get('issues') or []) +
+                    ['评审期间文件发生变化或丢失：' + p for p in changed])
+                evaluation = enforce_audit(evaluation, audit)
+            evaluation = route_review(evaluation)
             failure = classify_failure(node.result, evaluation, tools)
             evaluation.update(failure_class=failure['kind'], failure_reasons=failure['reasons'],
                               pipeline_action=failure['action'], research_stage=node.research_stage,
-                              pipeline_version='v9.3-complete')
+                              repair_route=failure['action'],
+                              pipeline_version='v9.5.3-review-routing')
+            if failure['action'] == 'reevaluate':
+                evaluation.update(acceptance_state='review_pending', repair_route='reevaluate',
+                    decision='to_revise', verdict='refine', review_exhausted=True,
+                    policy_reason='评审重试额度已用尽或已关闭；原始成果保留为待评审，不派发新的科学计算。')
+            elif failure['kind'] != 'NONE':
+                evaluation['acceptance_state'] = 'blocked'
             evaluation = score_node(node.result, evaluation, subtask, tools)
             evaluation['final_decision'] = evaluation['decision']
             evaluation['critic_decision'] = evaluation.get('model_decision')
@@ -78,7 +112,8 @@ class NodePipeline:
             will_repair = self.repair.allowed(failure, attempt)
             node.repair_status = ('queued' if will_repair else 'succeeded' if attempt and failure['kind'] == 'NONE' else
                                   'exhausted' if failure['action'] == 'repair_then_retry' else
-                                  'review_exhausted' if failure['kind'] == 'CRITIC_FAILURE' else 'not_needed')
+                                  'review_pending' if failure['action'] == 'reevaluate' else
+                                  'report_repair' if failure['action'] == 'report_repair' else 'not_needed')
             owner._finish_pipeline_node(node, output)
             nodes.append(node)
             if not will_repair:

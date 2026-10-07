@@ -1,3 +1,4 @@
+from utils.run_observer import monitored
 import json
 import math
 import multiprocessing as mp
@@ -46,6 +47,22 @@ def _init_worker():
     _WORKER_INIT = True
 
 
+def _run_theo_checkpointed(payload, config_path):
+    import os
+    from utils.recovery import RunLock
+    lease=Path(payload['task_dir'])/'worker_leases'/str(os.getpid())
+    from utils.research_monitor import safe_read
+    lock=RunLock(lease, wait_timeout=5, busy_message='工作进程租约获取超时')
+    with RunLock(Path(payload['task_dir'])/'start_gate', wait_timeout=30,
+                 busy_message='工作进程启动协调锁等待超时'):
+        generation=(safe_read(Path(payload['task_dir'])/'worker_generation.json') or {}).get('generation')
+        if payload.get('execution_generation') and generation!=payload['execution_generation']:
+            return {'result':{'execution_error':'过期工作进程已取消，原任务已恢复'},'tool_calls':[]}
+        lock.__enter__()
+    try:return run_theo_node(payload, config_path)
+    finally:lock.__exit__(None,None,None)
+
+
 class SupervisorOrchestrator:
     """MCTS-based orchestrator. Drives the search loop: select a leaf node,
     ask the Supervisor LLM for dispatch instructions, expand children via
@@ -71,6 +88,11 @@ class SupervisorOrchestrator:
         rebuild_contract=None,
         timing=None,
     ):
+        import os
+        self.execution_generation = os.environ.get('PHY_RUN_SESSION')
+        self.recovery_enabled = True
+        self.recovery_stage = "search"
+        self.recovery_result = None
         self.timing = timing
         self.update_inbox = update_inbox
         self.rebuild_contract = rebuild_contract
@@ -117,6 +139,9 @@ class SupervisorOrchestrator:
 
         if self.web_enabled:
             self.kb_search_tools.append(WEB_SEARCH_TOOL)
+            from utils.research_web import READ_TOOL
+            if self.tools_cfg.get('source_read_enabled', True):
+                self.kb_search_tools.append(READ_TOOL)
         if self.codata_enabled:
             self.kb_search_tools.append(CODATA_TOOL)
 
@@ -245,7 +270,22 @@ class SupervisorOrchestrator:
     def _load_prompt(self, filename: str) -> str:
         path = self.prompts_path / filename
         with open(path, "r", encoding="utf-8") as f:
-            return f.read()
+            text=f.read()
+        if filename.endswith('_system_prompt.txt'):
+            from utils.task_scope import RULES
+            text+='\n\n'+RULES
+        return text
+
+    def save_recovery(self, stage=None, result=None):
+        if not getattr(self, 'recovery_enabled', False): return
+        from utils.recovery import save_checkpoint, supervisor_state
+        if stage is not None: self.recovery_stage = stage
+        if result is not None: self.recovery_result = result
+        inbox = self.update_inbox
+        save_checkpoint(self.task_dir, dict(stage=self.recovery_stage,
+            contract=self.structured_problem,supervisor=supervisor_state(self),
+            result=self.recovery_result,
+            inbox=dict(session=inbox.session,seen=sorted(inbox.seen)) if inbox else None))
 
     def run(self) -> Dict[str, Any]:
         """Main MCTS loop. Returns a summary dict with the best trajectory,
@@ -254,12 +294,16 @@ class SupervisorOrchestrator:
         while True:
             self._control_checkpoint()
             self._apply_pending_updates()
+            if getattr(self,'recovering',False) and self._find_full_completion_path() is not None:
+                stop_reason = 'all_subtasks_completed'
+                break
             if self.round_counter >= self.max_rounds:
                 stop_reason = 'round_budget_exhausted'
                 break
             selected_node = self._select_leaf_node()
             if selected_node is None:
-                stop_reason = 'no_selectable_node'
+                from utils.review_routing import pending_review
+                stop_reason = 'review_pending' if any(pending_review(n) for n in self.tree.get_all_nodes()) else 'no_selectable_node'
                 break
 
             dispatch = self._resolve_dispatch(selected_node)
@@ -332,6 +376,7 @@ class SupervisorOrchestrator:
         return summary
 
     def _control_checkpoint(self):
+        self.save_recovery()
         if self.update_inbox is not None:
             self.update_inbox.checkpoint(self.round_counter, self.live_revision)
 
@@ -385,6 +430,9 @@ class SupervisorOrchestrator:
         self.max_rounds = self.round_counter + self.revision_round_budget
         self.live_revision = revision
         self.live_update_history = history
+        # Commit tree+contract+receipt identity before acknowledging messages.
+        self.update_inbox.seen.update(name for name, _ in items)
+        if getattr(self,'recovery_enabled',False):self.save_recovery()
         self.update_inbox.acknowledge(items, revision)
         self.update_inbox.progress("running", self.round_counter, revision)
         print(f"[LiveUpdate] Applied revision {revision}: {len(items)} update(s); replanning")
@@ -394,6 +442,9 @@ class SupervisorOrchestrator:
     def _resolve_dispatch(self, node: MCTSNode) -> Dict[str, Any]:
         """Ask the Supervisor LLM what to do next for this node, then figure
         out the target subtask, node type, and expansion count."""
+        from utils.review_routing import pending_review, repair_scope_instruction
+        if pending_review(node):
+            return {"stop_search": True, "reason": "review_pending"}
         hcc_context = self.tree.get_context_for_node(node)
 
         supervisor_raw = ""
@@ -451,6 +502,15 @@ class SupervisorOrchestrator:
             # A suggestion for a different task must not leak into this task's instructions.
             description = str(subtask.get('description', '')).strip()
 
+        # Model dispatch cannot silently expand a prose repair into a fresh global study.
+        repair_scope = repair_scope_instruction(node.evaluation or {})
+        if repair_scope and int(node.subtask_id) == int(subtask_id):
+            if (node.evaluation or {}).get('repair_route') == 'report_repair':
+                description = str(subtask.get('description', '')).strip()
+                node_type = 'revise'
+                expansion_count = 1
+            description += repair_scope
+
         supervisor_dispatch = {
             "dispatch_adjusted": dispatch_adjusted,
             "dispatch_reason": dispatch_reason,
@@ -472,6 +532,7 @@ class SupervisorOrchestrator:
         }
     
     
+    @monitored()
     @timed_stage('promoter')
     def _call_promoter(self, node: MCTSNode) -> str:
         """Distill raw experience into compressed knowledge.
@@ -515,6 +576,7 @@ class SupervisorOrchestrator:
         )
         return response
 
+    @monitored()
     def _call_supervisor(self, node: MCTSNode, hcc_context: str) -> str:
         """Ask the Supervisor LLM to decide what subtask to work on next
         and whether to draft or revise. The supervisor sees the full
@@ -551,6 +613,7 @@ class SupervisorOrchestrator:
         )
         return response
 
+    @monitored()
     @timed_stage('critic')
     def _call_critic(self, node: MCTSNode) -> Dict[str, Any]:
         """Evaluate a Theoretician's output. Returns decision, verdict,
@@ -565,7 +628,11 @@ class SupervisorOrchestrator:
         code = node_output.get("code") or ""
         files = node_output.get("files") or []
 
-        from utils.review_evidence import collect_review_evidence
+        from utils.node_delivery import required_file_names
+        from utils.review_evidence import collect_review_evidence, evidence_catalog, make_reader, READ_REVIEW_TOOL, uncovered_reports, wrap_review_retrieval
+        review_evidence = collect_review_evidence(getattr(self, 'task_dir', None), node)
+        review_reads = []
+        review_reader = make_reader(getattr(self, 'task_dir', None), evidence_catalog(review_evidence), review_reads)
         context_str = json.dumps(
             {"analysis": analysis, "code": code, "files": files,
              "primary_parameters":node_output.get('primary_parameters'),
@@ -573,22 +640,47 @@ class SupervisorOrchestrator:
              "primary_cases":node_output.get('primary_cases'),
              "supplementary_cases":node_output.get('supplementary_cases'),
              "numerical_results":node_output.get('numerical_results'),
-             "observed_file_evidence":collect_review_evidence(getattr(self,'task_dir',None),node)},
+             "observed_file_evidence":review_evidence},
             ensure_ascii=False,
             indent=2,
         )
         from core.research_lifecycle import stage_contract
         stage_scope = stage_contract(getattr(node, "subtask_payload", {}))
+        # Critic must evaluate the same node-local delivery paths given to the
+        # solver. Task-root paths describe program-owned final publication;
+        # requiring them before node acceptance creates a circular dependency.
+        from pathlib import Path
+        from utils.research_integrity import node_contract_for_solver
+        review_task_dir = getattr(self, 'task_dir', None)
+        review_contract = (node_contract_for_solver(self.structured_problem,
+                           Path(review_task_dir) / f'node_{node.node_id}')
+                           if review_task_dir else self.structured_problem)
         prompt = ("## Research stage scope\n" + json.dumps(stage_scope, ensure_ascii=False) + "\n## Current authoritative contract\n"
-                  + json.dumps(self.structured_problem, ensure_ascii=False, indent=2)
+                  + json.dumps(review_contract, ensure_ascii=False, indent=2)
                   + "\n## Current node scope\n" + json.dumps(dict(subtask_id=node.subtask_id,
                       subtask=getattr(node, 'subtask_payload', {}),description=getattr(node, 'subtask_description', '')),ensure_ascii=False)
+                  + "\n## Program-owned artifact path policy\n"
+                    "The solver MUST generate this attempt's files in current_node_dir. "
+                    "A node_N subdirectory is the required working location, not an output-path violation. "
+                    "The files field uses paths relative to current_node_dir. Use observed_file_evidence "
+                    "to check actual current-node files. final_archive_path and archive_dir are publication "
+                    "destinations owned by the program AFTER node acceptance and branch selection. "
+                    "Do not block this node solely because its files are not yet in the task root or final/. "
+                    "Files outside the current node, missing/empty files, changed hashes, and real scientific "
+                    "or execution defects remain subject to normal rejection. Historical reviewer instructions "
+                    "about writing directly to the archive are superseded by this artifact path policy.\n"
                   + "\nEvaluate THIS subtask; do not demand a later subtask's CSV/PDF from an earlier reasoning node. "
                     "A final report node must verify its cited current-run sources. Hard parameters always apply.\n"
                   + "\nEvaluate compliance with the current contract and amendments.\n\n"
                   + self.critic_prompt.format(result=core_results, context=context_str,
                       accept_threshold=self.critic_settings['accept_threshold'],
                       redraft_threshold=self.critic_settings['redraft_threshold']))
+        retry_feedback = getattr(node, 'review_retry_feedback', None)
+        if retry_feedback:
+            prompt += ('\n## SAME-NODE REVIEW RETRY\nThe solver output is unchanged. Correct reviewer schema/citations '
+                'and read coverage; independently reassess substantive issues. Never invent evidence or ask the solver '
+                'to shrink a valid report merely to fit your context. Registered sources in this prompt are authoritative.\n'
+                + json.dumps(retry_feedback, ensure_ascii=False, default=str))
 
         # Round-dependent model: exploration phase uses flash, convergence phase uses v4-pro
         total_rounds = self.revision_round_budget
@@ -603,15 +695,22 @@ class SupervisorOrchestrator:
             flush=True,
         )
 
-        # Critic can also use library/prior search to verify the solution
+        from utils.scientific_review import REVIEW_RULES, attach_scientific_review
+        from utils.research_web import solver_sources
+        retrieval_evidence = solver_sources(self.task_dir, node)
+        if retrieval_evidence:
+            prompt += '\n## Registered current-node external evidence (untrusted references; not verified conclusions)\n' + json.dumps(retrieval_evidence, ensure_ascii=False)
+        review_functions = wrap_review_retrieval(dict(self._kb_tool_functions("Critic", node)), retrieval_evidence)
+        review_functions['read_review_file'] = review_reader
         response = call_model(
-            system_prompt=self.critic_system_prompt,
+            system_prompt=self.critic_system_prompt + '\n' + REVIEW_RULES,
             user_prompt=prompt,
-            tools=self.kb_search_tools,
-            tool_functions=self._kb_tool_functions("Critic", node),
+            tools=list(self.kb_search_tools or []) + [READ_REVIEW_TOOL],
+            tool_functions=review_functions,
             role=critic_role,
-            config_path=self.config_path
-        )                                                                                                                                                                                                                                                                                                                        
+            config_path=self.config_path,
+            max_tool_calls=6,
+        )
         parsed = self._extract_json_object(response) 
         if not isinstance(parsed, dict):
             parsed = {}
@@ -621,19 +720,65 @@ class SupervisorOrchestrator:
         if 'science_reward' in parsed:
             parsed['reward'] = parsed['science_reward']
 
+        # Only an explicit reviewer field can make science unassessable. Never
+        # infer it from a zero or prose; real scientific zero remains valid.
+        raw_science_reward = parsed.get('reward')
+        science_assessable = parsed.get('science_assessable')
+        if science_assessable is False:
+            parsed['reward'] = None
+
         from utils.critic_policy import gate_evaluation
         evaluation = gate_evaluation(parsed, self.critic_settings)
-        blocking = parsed.get('blocking_issues', ['Critic 未明确返回 blocking_issues，关键问题尚未核对'])
-        if not isinstance(blocking,list):blocking=['Critic blocking_issues 字段格式无效']
-        evaluation['review_valid'] = isinstance(parsed.get('blocking_issues'), list) and evaluation.get('decision_valid', True)
+        if isinstance(science_assessable, bool):
+            evaluation['science_assessable'] = science_assessable
+            evaluation['raw_science_reward'] = raw_science_reward
+            evaluation['science_assessment_reason'] = self._to_natural_text(parsed.get('science_assessment_reason'))
+        if science_assessable is False:
+            evaluation['policy_reason'] = '科学内容缺少可评估证据，科学分未评分；交付和验证仍需核对。'
+        protocol_reasons = []
+        blocking = parsed.get('blocking_issues')
+        if not isinstance(blocking,list) or any(not isinstance(x,str) for x in blocking):
+            protocol_reasons.append('Critic blocking_issues 字段缺失或格式无效')
+            blocking = list(protocol_reasons)
+        else:
+            blocking = list(blocking)
+        assessment_field_valid = ('science_assessable' not in parsed or isinstance(science_assessable, bool))
+        if not assessment_field_valid:
+            protocol_reasons.append('Critic science_assessable 字段格式无效')
+            blocking.append(protocol_reasons[-1])
+        if not evaluation.get('decision_valid', True):
+            protocol_reasons.append('Critic 未返回有效决定')
+        evaluation['review_valid'] = not protocol_reasons
+        evaluation['review_valid'] = evaluation['review_valid'] and assessment_field_valid
         evaluation['research_stage'] = stage_scope['research_stage']
         evaluation['blocking_issues']=blocking
+        evaluation['review_pending_reasons'] = protocol_reasons
         if blocking:
             decision='to_redraft' if evaluation['decision']=='to_redraft' else 'to_revise'
             evaluation.update(decision=decision,verdict='reject' if decision=='to_redraft' else 'refine')
             evaluation['policy_reason']='；'.join(filter(None,[evaluation.get('policy_reason'),
                 '存在未解决的关键评审问题或评审字段缺失，不能完成。']))
         evaluation['decision_adjusted']=evaluation['decision']!=evaluation['model_decision']
+        evaluation = attach_scientific_review(evaluation, parsed,
+            review_evidence.get('coverage', []), review_reads, retrieval_evidence)
+        if stage_scope['research_stage'] == 'FINALIZATION':
+            required_names = set(required_file_names(stage_scope.get('current_expected_output')))
+            catalog = evidence_catalog(review_evidence)
+            required_reports = [path for path, row in catalog.items()
+                if row.get('node_id') == node.node_id and Path(row['path']).name in required_names
+                and Path(row['path']).suffix.lower() in ('.md', '.txt', '.pdf', '.docx')]
+            missing_coverage = uncovered_reports(catalog, review_reads, required_reports)
+            if missing_coverage:
+                evaluation['blocking_issues'].extend(missing_coverage)
+                evaluation['scientific_review']['blockers'].extend(missing_coverage)
+                evaluation['review_pending_reasons'].extend(missing_coverage)
+                evaluation['review_valid'] = False
+                if evaluation['decision'] == 'complete':
+                    evaluation.update(decision='to_revise', verdict='refine')
+                evaluation['policy_reason'] = '；'.join(filter(None, [evaluation.get('policy_reason'), '最终报告证据覆盖不完整。']))
+        evaluation['decision_adjusted'] = evaluation['decision'] != evaluation['model_decision']
+        from utils.review_routing import route_review
+        evaluation = route_review(evaluation)
         opinion = self._to_natural_text(parsed.get("opinion"))
         analysis_text = self._to_natural_text(parsed.get("analysis") or parsed.get("summary") or opinion)
         if evaluation['policy_reason']:
@@ -712,6 +857,7 @@ class SupervisorOrchestrator:
                 }
 
             payload = {
+                "execution_generation": self.execution_generation,
                 "depth": parent.get_depth() + 1,
                 "node_id": node_id,
                 "node_type": node_type,
@@ -738,13 +884,15 @@ class SupervisorOrchestrator:
                 f"task assigned 📖"
             )
 
+        self.save_recovery()  # IDs and open attempts are durable before launch.
+
         # Step 3: 统一提交任务，带进程池损坏重试机制
         futures = []
         max_retries = 3
         for attempt in range(max_retries + 1):
             try:
                 futures = [
-                    _GLOBAL_POOL.submit(run_theo_node, payload, self.config_path)
+                    _GLOBAL_POOL.submit(_run_theo_checkpointed, payload, self.config_path)
                     for payload in payloads
                 ]
                 break  # 提交成功，跳出重试循环
@@ -802,7 +950,10 @@ class SupervisorOrchestrator:
 
         return child_nodes
 
+    @monitored()
     def _finish_pipeline_node(self, child_node, node_output):
+        from utils.run_observer import progress
+        progress(self, child_node)
         evaluation = child_node.evaluation
         reward = child_node.reward
         node_log = self.logger.get_node_logger(child_node.node_id) if self.logger else None
@@ -822,10 +973,11 @@ class SupervisorOrchestrator:
                     result=tc.get("result", ""),
                 )
 
+        from utils.review_routing import pending_review
         self.monitor.node(child_node,"distilling")
-
         try:
-            child_node.knowledge = self._call_promoter(child_node)
+            child_node.knowledge = ('[REVIEW PENDING] 评审协议或读取未完成；保留原始成果，不能据此认定科学失败或验收。'
+                if pending_review(child_node) else self._call_promoter(child_node))
         except Exception as exc:
             # Knowledge distillation is auxiliary: retain completed evidence
             # and review if its model request fails.
@@ -848,6 +1000,7 @@ class SupervisorOrchestrator:
         child_node.status = "completed"
         child_node.backpropagate(reward)
         self.monitor.node(child_node,"finished")
+        self.save_recovery()
 
 
     @timed_stage('repair')
@@ -873,14 +1026,15 @@ class SupervisorOrchestrator:
         payload['node_id'] = node_id
         payload['depth'] = node.get_depth()
         self.monitor.node(node, 'solving')
+        self.save_recovery()
         try:
             try:
-                future = _GLOBAL_POOL.submit(run_theo_node, payload, self.config_path)
+                future = _GLOBAL_POOL.submit(_run_theo_checkpointed, payload, self.config_path)
             except BrokenProcessPool:
                 # A killed original worker must not make every subsequent repair fail.
                 _GLOBAL_POOL.shutdown(wait=False, cancel_futures=True)
                 _GLOBAL_POOL = ProcessPoolExecutor(max_workers=self.processes, mp_context=mp.get_context('spawn'))
-                future = _GLOBAL_POOL.submit(run_theo_node, payload, self.config_path)
+                future = _GLOBAL_POOL.submit(_run_theo_checkpointed, payload, self.config_path)
             output = future.result()
             if not isinstance(output, dict):
                 raise ValueError('Repair worker returned no structured output')
@@ -1043,73 +1197,8 @@ class SupervisorOrchestrator:
 
     
     def _web_search(self, query: str, top_k: int = 3) -> str:
-        """Tool function: general web search via Tavily, with dedup + critic."""
-        self._tool_call_counts["web_search"] += 1
-        if self._tool_call_counts["web_search"] > self._tool_budget["web_search"]:
-            return ("[web_search] Budget exhausted. Use `library_search` "
-                    "for arXiv papers or proceed with existing evidence.")
-        print(f"\n[WebSearch] >>> query={query!r} top_k={top_k}")
-        if not self.web_enabled:
-            return "[web_search] not enabled."
-
-        # ① query 去重
-        norm_q = self._normalize_query(query)
-        if norm_q in self._seen_queries:
-            print(f"[WebSearch] duplicate query, skipping: {query!r}")
-            return (f"[web_search] This query has already been searched in a "
-                    f"previous step. Do NOT repeat it. Try a substantially "
-                    f"different phrasing or move to another subtask.")
-
-        try:
-            if self._web_searcher is None:
-                from tools.web_search import WebSearch
-                self._web_searcher = WebSearch(self.tools_cfg)
-
-            raw = self._web_searcher.search(query, k=int(top_k) * 2)
-            print(f"[WebSearch] <<< got {len(raw)} raw results")
-
-            # ③ URL 去重
-            fresh = []
-            for r in raw:
-                url = (r.get("url") or "").strip()
-                if url and url in self._seen_urls:
-                    continue
-                fresh.append(r)
-            print(f"[WebSearch] after url-dedup: {len(fresh)} fresh")
-
-            # ④ 质量过滤
-            if self.retrieval_critic_enabled and fresh:
-                fresh = self._get_retrieval_critic().filter(query, fresh)
-                print(f"[WebSearch] after critic: {len(fresh)} kept")
-
-            # 无论结果如何，这个 query 已搜过
-            self._seen_queries.add(norm_q)
-
-            if not fresh:
-                print(f"[WebSearch] no fresh results; returning notice")
-                return (f"[web_search] No new results. STOP searching — this query "
-                        f"and similar ones have been exhausted. Use the evidence you "
-                        f"already have from previous steps and produce your answer NOW.")
-
-            results = fresh[:int(top_k)]
-            for r in results:
-                url = (r.get("url") or "").strip()
-                if url:
-                    self._seen_urls.add(url)
-
-            lines = []
-            for i, r in enumerate(results, 1):
-                lines.append(
-                    f"[{i}] {r.get('title', '')}\n"
-                    f"    URL: {r.get('url', '')}\n"
-                    f"    {r.get('snippet', '')[:300]}"
-                )
-            out = "\n\n".join(lines)
-            print(f"[WebSearch] returning {len(out)} chars to LLM")
-            return out
-        except Exception as e:
-            print(f"[WebSearch] !!! exception: {e}")
-            return f"[web_search] failed: {e}"
+        from utils.research_web import supervisor_tool
+        return supervisor_tool(self, 'Supervisor', None, 'search', query=query, top_k=top_k)
 
 
     def _codata_lookup(self, name: str) -> str:
@@ -1152,10 +1241,10 @@ class SupervisorOrchestrator:
                 self._prior_search(**kwargs),
             )[1]
         if self.web_enabled:
-            functions["web_search"] = lambda **kwargs: (
-                self._log_tool_call(agent_label, node, "web_search"),
-                self._web_search(**kwargs),
-            )[1]
+            from utils.research_web import supervisor_tool
+            functions['web_search'] = lambda **kwargs: (self._log_tool_call(agent_label, node, 'web_search'), supervisor_tool(self, agent_label, node, 'search', **kwargs))[1]
+            if self.tools_cfg.get('source_read_enabled', True):
+                functions['read_web_source'] = lambda **kwargs: (self._log_tool_call(agent_label, node, 'read_web_source'), supervisor_tool(self, agent_label, node, 'read', **kwargs))[1]
         if self.codata_enabled:
             functions["codata_lookup"] = lambda **kwargs: (
                 self._log_tool_call(agent_label, node, "codata_lookup"),
@@ -1175,6 +1264,7 @@ class SupervisorOrchestrator:
             for node in self.tree.get_all_nodes()
             if node.node_type != "virtual" and node.is_leaf()
             and node.status not in {"completed_closed", "completed_expended", "failed"}
+            and (node.evaluation or {}).get('acceptance_state') != 'review_pending'
         ]
         if not candidates:
             return None
@@ -1220,6 +1310,7 @@ class SupervisorOrchestrator:
             for n in self.tree.get_all_nodes()
             if n.node_type != "virtual"
             and n.status not in {"completed_closed", "failed"}
+            and (n.evaluation or {}).get('acceptance_state') != 'review_pending'
             and n.get_depth() == depth
         ]
         if len(candidates) <= self.active_beam_width:

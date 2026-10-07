@@ -1,0 +1,7 @@
+# Replace the example with your real hostname and --public-url value.
+physmaster.tech {
+    encode gzip
+    reverse_proxy 127.0.0.1:8765 {
+        header_up Host physmaster.tech
+    }
+}

@@ -17,13 +17,13 @@ Output:
 
 Mandatory compliance review:
 - Check hard_parameters against every primary scenario, actual code and outputs.
-  A changed total mass or other locked value blocks complete regardless of score.
+  An unauthorized change to any locked value blocks complete regardless of score.
 - Missing declarations/evidence, unresolved material reviewer objections or
   unexecuted required validation must not receive complete.
-- Check total opening load versus incremental parachute force, thermal reference
-  conditions versus unsupported correction factors, peak-event location versus
-  initial location, posture versus drag/loading direction, and stability assumed
-  versus stability demonstrated when relevant.
+- Choose checks from this task's actual scientific requirements: units,
+  assumptions, boundary/initial conditions, model applicability, conservation,
+  quantitative consistency, and required validation when relevant. Do not impose
+  domain-specific safety criteria or file formats from unrelated tasks.
 - An alternative scenario with changed constraints must be clearly supplementary;
   do not use it as the task's main conclusion.
 - Confirm promised files exist in the current node. For final analysis/report,

@@ -1,0 +1,240 @@
+test_disabled_python_skills_and_arxiv_are_not_exposed_or_invokable (test_capabilities.CapabilityToolTests.test_disabled_python_skills_and_arxiv_are_not_exposed_or_invokable) ... ok
+test_python_can_run_independently_of_skills (test_capabilities.CapabilityToolTests.test_python_can_run_independently_of_skills) ... ok
+test_skills_use_the_task_config_and_can_run_without_python (test_capabilities.CapabilityToolTests.test_skills_use_the_task_config_and_can_run_without_python) ... ok
+test_web_and_arxiv_and_codata_registrations_are_independent (test_capabilities.CapabilityToolTests.test_web_and_arxiv_and_codata_registrations_are_independent) ... ok
+test_capabilities_are_per_task_and_survive_continuation_and_restart (test_chat_server.ChatServerTests.test_capabilities_are_per_task_and_survive_continuation_and_restart) ... ok
+test_capability_validation_has_no_worker_side_effect (test_chat_server.ChatServerTests.test_capability_validation_has_no_worker_side_effect) ... ok
+test_completed_continuation_inherits_conditions_and_preserves_outputs (test_chat_server.ChatServerTests.test_completed_continuation_inherits_conditions_and_preserves_outputs) ... ok
+test_continue_rejects_running_source_and_concurrent_worker (test_chat_server.ChatServerTests.test_continue_rejects_running_source_and_concurrent_worker) ... ok
+test_critic_settings_are_written_inherited_and_restored (test_chat_server.ChatServerTests.test_critic_settings_are_written_inherited_and_restored) ... ok
+test_early_message_pause_batch_resume_and_final_receipt (test_chat_server.ChatServerTests.test_early_message_pause_batch_resume_and_final_receipt) ... ok
+test_failed_and_legacy_task_timing (test_chat_server.ChatServerTests.test_failed_and_legacy_task_timing) ... ok
+test_hard_parameters_inherit_user_input_not_old_summary (test_chat_server.ChatServerTests.test_hard_parameters_inherit_user_input_not_old_summary) ... ok
+test_http_security_validation_and_start (test_chat_server.ChatServerTests.test_http_security_validation_and_start) ... ok
+test_invalid_critic_settings_cannot_start_a_worker (test_chat_server.ChatServerTests.test_invalid_critic_settings_cannot_start_a_worker) ... ok
+test_late_unapplied_condition_is_carried_into_next_run (test_chat_server.ChatServerTests.test_late_unapplied_condition_is_carried_into_next_run) ... ok
+test_normal_exit_without_completion_report_is_partial (test_chat_server.ChatServerTests.test_normal_exit_without_completion_report_is_partial) ... ok
+test_restore_new_and_legacy_completed_history (test_chat_server.ChatServerTests.test_restore_new_and_legacy_completed_history) ... ok
+test_runtime_mass_amendment_changes_only_after_receipt (test_chat_server.ChatServerTests.test_runtime_mass_amendment_changes_only_after_receipt) ... ok
+test_single_worker_and_validation (test_chat_server.ChatServerTests.test_single_worker_and_validation) ... ok
+test_summary_download_formats_and_path_containment (test_chat_server.ChatServerTests.test_summary_download_formats_and_path_containment) ... ok
+test_timing_pause_completion_restart_and_continuation (test_chat_server.ChatServerTests.test_timing_pause_completion_restart_and_continuation) ... ok
+test_v9_continuation_carries_manifest_for_revalidation_not_inherited_acceptance (test_chat_server.ChatServerTests.test_v9_continuation_carries_manifest_for_revalidation_not_inherited_acceptance) ... ok
+test_budget_validation_and_disable (test_complete_controller.CompletePolicyTests.test_budget_validation_and_disable) ... ok
+test_critic_aliases_and_unknown_protocol (test_complete_controller.CompletePolicyTests.test_critic_aliases_and_unknown_protocol) ... ok
+test_current_files_block_acceptance_but_later_report_does_not (test_complete_controller.CompletePolicyTests.test_current_files_block_acceptance_but_later_report_does_not) ... ok
+test_execution_missing_is_unscored_and_failure_is_not_success (test_complete_controller.CompletePolicyTests.test_execution_missing_is_unscored_and_failure_is_not_success) ... ok
+test_failure_priority_and_repaired_receipt (test_complete_controller.CompletePolicyTests.test_failure_priority_and_repaired_receipt) ... ok
+test_no_dead_adapters_on_supervisor_path (test_complete_controller.CompletePolicyTests.test_no_dead_adapters_on_supervisor_path) ... ok
+test_nonempty_or_registered_file_cannot_be_published (test_complete_controller.CompletePolicyTests.test_nonempty_or_registered_file_cannot_be_published) ... ok
+test_stage_is_scope_not_draft_revise_and_explicit_stage_wins (test_complete_controller.CompletePolicyTests.test_stage_is_scope_not_draft_revise_and_explicit_stage_wins) ... ok
+test_verified_file_from_unselected_node_cannot_publish (test_complete_controller.CompletePolicyTests.test_verified_file_from_unselected_node_cannot_publish) ... ok
+test_actual_critic_call_uses_config_in_prompt_and_gate (test_critic_policy.CriticPolicyTests.test_actual_critic_call_uses_config_in_prompt_and_gate) ... [Theoretician] (node_id= subtask_id= node_type=) tool call Python_code_interpreter 🛠️
+[Theoretician] (node_id= subtask_id= node_type=) tool call load_skill_specs 🛠️
+[Supervisor] _call_critic round=1/6 role=critic
+[Supervisor] _call_critic round=1/6 role=critic
+[Supervisor] _call_critic round=1/6 role=critic
+[Supervisor] _call_critic round=1/6 role=critic
+[Supervisor] _call_critic round=1/6 role=critic
+[Supervisor] _call_critic round=1/6 role=critic
+[Supervisor] _call_critic round=1/6 role=critic
+[Supervisor] _call_critic round=1/6 role=critic
+ok
+test_invalid_scores_cannot_complete_or_poison_tree (test_critic_policy.CriticPolicyTests.test_invalid_scores_cannot_complete_or_poison_tree) ... ok
+test_retrieval_threshold_keeps_boundary_and_can_reject_all (test_critic_policy.CriticPolicyTests.test_retrieval_threshold_keeps_boundary_and_can_reject_all) ... ok
+test_score_boundaries_and_no_automatic_promotion (test_critic_policy.CriticPolicyTests.test_score_boundaries_and_no_automatic_promotion) ... ok
+test_validation_and_ordering (test_critic_policy.CriticPolicyTests.test_validation_and_ordering) ... ok
+test_atomic_order_receipts_and_session_isolation (test_live_updates.LiveUpdateTests.test_atomic_order_receipts_and_session_isolation) ... ok
+test_empty_is_rejected (test_live_updates.LiveUpdateTests.test_empty_is_rejected) ... ok
+test_replanning_preserves_shared_contract_and_invalidates_old_tree (test_live_updates.LiveUpdateTests.test_replanning_preserves_shared_contract_and_invalidates_old_tree) ... ok
+test_update_arriving_during_round_prevents_old_completion (test_live_updates.LiveUpdateTests.test_update_arriving_during_round_prevents_old_completion) ... ok
+test_budget_one_and_invalid_budgets (test_llm_finalization.FinalizationTests.test_budget_one_and_invalid_budgets) ... [RetrievalCritic] -- [0] score=0.20  a
+[RetrievalCritic] OK [1] score=0.50  b
+[RetrievalCritic] OK [2] score=0.90  c
+[RetrievalCritic] -- [0] score=0.20  a
+[RetrievalCritic] -- [1] score=0.50  b
+[RetrievalCritic] -- [2] score=0.90  c
+[RetrievalCritic] LLM call failed: service unavailable; fail-open
+[LiveUpdate] Applied revision 1: 1 update(s); replanning
+[LiveUpdate] Applied revision 1: 1 update(s); replanning
+[LLM] iter=0 model=mock
+[LLM] iter=0 llm_dt=0.0s tools=0 finish=stop elapsed=0.0s
+[LLM] done total=0.0s
+ok
+test_budget_reserves_final_answer_after_real_tool_writes (test_llm_finalization.FinalizationTests.test_budget_reserves_final_answer_after_real_tool_writes) ... [LLM] iter=0 model=mock
+[LLM] iter=0 llm_dt=0.0s tools=1 finish=stop elapsed=0.0s
+[LLM]   tool=Python_code_interpreter dt=0.0s
+[LLM] iter=1 model=mock
+[LLM] iter=1 llm_dt=0.0s tools=1 finish=stop elapsed=0.0s
+[LLM]   tool=Python_code_interpreter dt=0.0s
+[LLM] iter=2 model=mock
+[LLM] iter=2 llm_dt=0.0s tools=1 finish=stop elapsed=0.0s
+[LLM]   tool=Python_code_interpreter dt=0.0s
+[LLM] iter=3 model=mock
+[LLM] iter=3 llm_dt=0.0s tools=1 finish=stop elapsed=0.0s
+[LLM]   tool=Python_code_interpreter dt=0.0s
+[LLM] iter=4 model=mock
+[LLM] iter=4 llm_dt=0.0s tools=1 finish=stop elapsed=0.0s
+[LLM]   tool=Python_code_interpreter dt=0.0s
+[LLM] iter=5 model=mock
+[LLM] iter=5 llm_dt=0.0s tools=1 finish=stop elapsed=0.0s
+[LLM]   tool=Python_code_interpreter dt=0.0s
+[LLM] iter=6 model=mock
+[LLM] iter=6 llm_dt=0.0s tools=1 finish=stop elapsed=0.0s
+[LLM]   tool=Python_code_interpreter dt=0.0s
+[LLM] iter=7 model=mock
+[LLM] iter=7 llm_dt=0.0s tools=0 finish=stop elapsed=0.0s
+[LLM] done total=0.0s
+ok
+test_early_final_and_markdown_format_need_no_extra_call (test_llm_finalization.FinalizationTests.test_early_final_and_markdown_format_need_no_extra_call) ... [LLM] iter=0 model=mock
+[LLM] iter=0 llm_dt=0.0s tools=0 finish=stop elapsed=0.0s
+[LLM] done total=0.0s
+ok
+test_empty_and_truncated_final_do_not_return_prior_planning (test_llm_finalization.FinalizationTests.test_empty_and_truncated_final_do_not_return_prior_planning) ... [LLM] iter=0 model=mock
+[LLM] iter=0 llm_dt=0.0s tools=1 finish=stop elapsed=0.0s
+[LLM]   tool=Python_code_interpreter dt=0.0s
+[LLM] iter=1 model=mock
+[LLM] iter=1 llm_dt=0.0s tools=0 finish=stop elapsed=0.0s
+[LLM] iter=0 model=mock
+[LLM] iter=0 llm_dt=0.0s tools=1 finish=stop elapsed=0.0s
+[LLM]   tool=Python_code_interpreter dt=0.0s
+[LLM] iter=1 model=mock
+[LLM] iter=1 llm_dt=0.0s tools=0 finish=length elapsed=0.0s
+ok
+test_final_round_tool_request_and_truncated_tool_request_never_execute (test_llm_finalization.FinalizationTests.test_final_round_tool_request_and_truncated_tool_request_never_execute) ... [LLM] iter=0 model=mock
+[LLM] iter=0 llm_dt=0.0s tools=1 finish=stop elapsed=0.0s
+[LLM] iter=0 model=mock
+[LLM] iter=0 llm_dt=0.0s tools=1 finish=length elapsed=0.0s
+ok
+test_single_call_rejects_empty_and_truncated_answers (test_llm_finalization.FinalizationTests.test_single_call_rejects_empty_and_truncated_answers) ... [LLM] (no tools) role=None model=mock prompt_chars=2
+[LLM] (no tools) done dt=0.0s
+[LLM] (no tools) role=None model=mock prompt_chars=2
+[LLM] (no tools) done dt=0.0s
+ok
+test_solver_retains_real_execution_and_files_on_delivery_or_api_failure (test_llm_finalization.FinalizationTests.test_solver_retains_real_execution_and_files_on_delivery_or_api_failure) ... [LLM] iter=0 model=deepseek-flash
+[LLM] iter=0 llm_dt=0.0s tools=1 finish=stop elapsed=0.0s
+[Theoretician] (node_id= subtask_id= node_type=) tool call Python_code_interpreter 🛠️
+[LLM]   tool=Python_code_interpreter dt=0.0s
+[LLM] iter=1 model=deepseek-flash
+[LLM] iter=1 llm_dt=0.0s tools=0 finish=stop elapsed=0.0s
+[Theoretician] final answer delivery failed: LLM final response failed: empty_response; model=deepseek-flash; finish=stop; round=2
+[LLM] iter=0 model=deepseek-flash
+[LLM] iter=0 llm_dt=0.0s tools=1 finish=stop elapsed=0.0s
+[Theoretician] (node_id= subtask_id= node_type=) tool call Python_code_interpreter 🛠️
+[LLM]   tool=Python_code_interpreter dt=0.0s
+[LLM] iter=1 model=deepseek-flash
+[LLM] iter=1 llm_dt=0.0s tools=0 finish=length elapsed=0.0s
+[Theoretician] final answer delivery failed: LLM final response failed: truncated_response; model=deepseek-flash; finish=length; round=2
+[LLM] iter=0 model=deepseek-flash
+[LLM] iter=0 llm_dt=0.0s tools=1 finish=stop elapsed=0.0s
+[Theoretician] (node_id= subtask_id= node_type=) tool call Python_code_interpreter 🛠️
+[LLM]   tool=Python_code_interpreter dt=0.0s
+[LLM] iter=1 model=deepseek-flash
+[Theoretician] final answer delivery failed: API unavailable
+ok
+test_actual_worker_passes_node_working_paths_to_solver (test_node_file_paths.NodeFilePathTests.test_actual_worker_passes_node_working_paths_to_solver) ... ok
+test_diagnostics_distinguish_missing_empty_and_wrong_directory (test_node_file_paths.NodeFilePathTests.test_diagnostics_distinguish_missing_empty_and_wrong_directory) ... ok
+test_existing_archive_copy_must_match_current_node (test_node_file_paths.NodeFilePathTests.test_existing_archive_copy_must_match_current_node) ... ok
+test_missing_empty_and_unlisted_node_files_cannot_be_replaced_by_root (test_node_file_paths.NodeFilePathTests.test_missing_empty_and_unlisted_node_files_cannot_be_replaced_by_root) ... ok
+test_other_nodes_old_runs_foreign_paths_and_traversal_not_corrected (test_node_file_paths.NodeFilePathTests.test_other_nodes_old_runs_foreign_paths_and_traversal_not_corrected) ... ok
+test_parameter_drift_and_failed_execution_still_block_acceptance (test_node_file_paths.NodeFilePathTests.test_parameter_drift_and_failed_execution_still_block_acceptance) ... ok
+test_real_execution_archive_claims_normalize_audit_and_archive (test_node_file_paths.NodeFilePathTests.test_real_execution_archive_claims_normalize_audit_and_archive) ... ok
+test_solver_paths_are_node_scoped_without_mutating_contract_or_output (test_node_file_paths.NodeFilePathTests.test_solver_paths_are_node_scoped_without_mutating_contract_or_output) ... ok
+test_symlink_cannot_supply_current_node_evidence (test_node_file_paths.NodeFilePathTests.test_symlink_cannot_supply_current_node_evidence) ... ok
+test_210kg_code_cannot_pass_even_with_high_critic_score (test_research_integrity.IntegrityTests.test_210kg_code_cannot_pass_even_with_high_critic_score) ... ok
+test_alias_subtasks_and_explicit_files_survive_malformed_model_fields (test_research_integrity.IntegrityTests.test_alias_subtasks_and_explicit_files_survive_malformed_model_fields) ... ok
+test_authority_amendments_units_and_manual_validation (test_research_integrity.IntegrityTests.test_authority_amendments_units_and_manual_validation) ... ok
+test_cli_does_not_force_advance_after_failures (test_research_integrity.IntegrityTests.test_cli_does_not_force_advance_after_failures) ... ok
+test_contract_preserves_user_parameters_and_current_pdf_delivery (test_research_integrity.IntegrityTests.test_contract_preserves_user_parameters_and_current_pdf_delivery) ... ok
+test_deliverables_from_rejected_branch_or_changed_files_are_not_promoted (test_research_integrity.IntegrityTests.test_deliverables_from_rejected_branch_or_changed_files_are_not_promoted) ... ok
+test_failed_execution_and_missing_files_are_not_accepted (test_research_integrity.IntegrityTests.test_failed_execution_and_missing_files_are_not_accepted) ... ok
+test_mcts_cannot_upgrade_high_reward_or_conflicting_verdict (test_research_integrity.IntegrityTests.test_mcts_cannot_upgrade_high_reward_or_conflicting_verdict) ... ok
+test_missing_analysis_pdf_stays_partial_and_accepted_files_are_copied (test_research_integrity.IntegrityTests.test_missing_analysis_pdf_stays_partial_and_accepted_files_are_copied) ... ok
+test_missing_or_invalid_pdf_is_not_manufactured (test_research_integrity.IntegrityTests.test_missing_or_invalid_pdf_is_not_manufactured) ... ok
+test_previous_case_summary_mass_drift_forces_provisional_banner (test_research_integrity.IntegrityTests.test_previous_case_summary_mass_drift_forces_provisional_banner) ... ok
+test_primary_scenarios_and_missing_evidence (test_research_integrity.IntegrityTests.test_primary_scenarios_and_missing_evidence) ... ok
+test_python_receipts_capture_real_exit_and_unicode (test_research_integrity.IntegrityTests.test_python_receipts_capture_real_exit_and_unicode) ... ok
+test_revision_of_prerequisite_invalidates_later_acceptance (test_research_integrity.IntegrityTests.test_revision_of_prerequisite_invalidates_later_acceptance) ... ok
+test_unchecked_evidence_cannot_weaken_redraft_decision (test_research_integrity.IntegrityTests.test_unchecked_evidence_cannot_weaken_redraft_decision) ... ok
+test_round_api_file_download_and_traversal_rejection (test_research_monitor.MonitorTests.test_round_api_file_download_and_traversal_rejection) ... ok
+test_round_outputs_evaluation_files_and_revision_history (test_research_monitor.MonitorTests.test_round_outputs_evaluation_files_and_revision_history) ... ok
+test_actual_llm_loop_records_api_tools_and_failures (test_runtime_timing.TimingTests.test_actual_llm_loop_records_api_tools_and_failures) ... [Theoretician] (node_id=1 subtask_id=1 node_type=draft) node response returned ✅
+[LLM] iter=0 model=mock
+[LLM] iter=0 llm_dt=0.0s tools=1 finish=stop elapsed=0.0s
+[LLM]   tool=web_search dt=0.0s
+[LLM] iter=1 model=mock
+[LLM] iter=1 llm_dt=0.0s tools=0 finish=stop elapsed=0.0s
+[LLM] done total=0.0s
+[LLM] (no tools) role=clarifier model=mock prompt_chars=2
+ok
+test_actual_pipeline_summary_success_and_failure_persist_timing (test_runtime_timing.TimingTests.test_actual_pipeline_summary_success_and_failure_persist_timing) ... ok
+test_nested_stages_are_exclusive_and_monotonic_on_failure (test_runtime_timing.TimingTests.test_nested_stages_are_exclusive_and_monotonic_on_failure) ... ok
+test_parallel_operation_samples_and_crash_freeze (test_runtime_timing.TimingTests.test_parallel_operation_samples_and_crash_freeze) ... ok
+test_telemetry_file_lock_does_not_abort_research (test_runtime_timing.TimingTests.test_telemetry_file_lock_does_not_abort_research) ... config file path: /tmp/tmp9_auue7o/config.yaml
+[Clarifier] Clarifying query from: /tmp/tmp9_auue7o/query.txt
+[LANDAU] Workflow: disabled
+[Clarifier] Structured problem saved to: /tmp/tmp9_auue7o/out/query/contract.json
+[LANDAU] Library: /workspace/scratch/d7aaf00138a5/physmaster-v93-complete/LANDAU/library
+[LANDAU] Workflow Dir: disabled
+[Skills] disabled
+[LANDAU] Prior: disabled
+[LiveUpdate] Inbox ready for task: /tmp/tmp9_auue7o/out/query
+[Summrizer] Summary generated: /tmp/tmp9_auue7o/out/query/summary.md
+[Visulization] visualization saved: /tmp/tmp9_auue7o/out/query/visualization.html
+config file path: /tmp/tmp9_auue7o/config.yaml
+[Clarifier] Clarifying query from: /tmp/tmp9_auue7o/query.txt
+[LANDAU] Workflow: disabled
+[Clarifier] Structured problem saved to: /tmp/tmp9_auue7o/out/query/contract.json
+[LANDAU] Library: /workspace/scratch/d7aaf00138a5/physmaster-v93-complete/LANDAU/library
+[LANDAU] Workflow Dir: disabled
+[Skills] disabled
+[LANDAU] Prior: disabled
+[LiveUpdate] Inbox ready for task: /tmp/tmp9_auue7o/out/query
+[Timing] Could not publish timing: locked
+[Timing] Could not publish timing: locked
+[Timing] Could not publish timing: locked
+[Timing] Could not publish timing: locked
+[Timing] Could not publish timing: locked
+ok
+test_hash_corruption_fails_before_mutation (test_upgrade_release.UpgradeTests.test_hash_corruption_fails_before_mutation) ... ok
+test_partial_write_failure_rolls_back (test_upgrade_release.UpgradeTests.test_partial_write_failure_rolls_back) ... ok
+test_protected_and_escaping_paths_fail_before_mutation (test_upgrade_release.UpgradeTests.test_protected_and_escaping_paths_fail_before_mutation) ... ok
+test_replaces_removes_and_backs_up_without_touching_user_data (test_upgrade_release.UpgradeTests.test_replaces_removes_and_backs_up_without_touching_user_data) ... ok
+test_symlink_target_is_rejected (test_upgrade_release.UpgradeTests.test_symlink_target_is_rejected) ... ok
+test_full_lifecycle_selected_branch_hashes_and_auxiliary_files (test_v9_delivery.ArtifactTests.test_full_lifecycle_selected_branch_hashes_and_auxiliary_files) ... ok
+test_malformed_pdf_and_symlink_node_are_rejected_before_acceptance (test_v9_delivery.ArtifactTests.test_malformed_pdf_and_symlink_node_are_rejected_before_acceptance) ... ok
+test_node_timeline_survives_finish_and_publication (test_v9_delivery.ArtifactTests.test_node_timeline_survives_finish_and_publication) ... ok
+test_real_review_excerpts_are_bounded_and_changed_sources_are_identified (test_v9_delivery.ArtifactTests.test_real_review_excerpts_are_bounded_and_changed_sources_are_identified) ... ok
+test_rejected_branch_undeclared_and_invalid_files_never_publish (test_v9_delivery.ArtifactTests.test_rejected_branch_undeclared_and_invalid_files_never_publish) ... ok
+test_summary_conflict_downgrades_final_manifest_too (test_v9_delivery.ArtifactTests.test_summary_conflict_downgrades_final_manifest_too) ... ok
+test_browser_disconnect_does_not_escape_response_writer (test_v9_delivery.DownloadTests.test_browser_disconnect_does_not_escape_response_writer) ... ok
+test_published_download_tamper_and_symlink_traversal_refusal (test_v9_delivery.DownloadTests.test_published_download_tamper_and_symlink_traversal_refusal) ... ok
+test_bounded_report_node_creates_real_pdf_and_requires_reviewer_acceptance (test_v9_delivery.FinalizerTests.test_bounded_report_node_creates_real_pdf_and_requires_reviewer_acceptance) ... ok
+test_does_not_attempt_to_cover_missing_science_or_csv_with_report (test_v9_delivery.FinalizerTests.test_does_not_attempt_to_cover_missing_science_or_csv_with_report) ... ok
+test_options_are_bounded_and_disable_without_model_calls (test_v9_delivery.FinalizerTests.test_options_are_bounded_and_disable_without_model_calls) ... ok
+test_missing_evidence_stays_unscored_and_failures_have_recorded_causes (test_v9_delivery.ScoreTests.test_missing_evidence_stays_unscored_and_failures_have_recorded_causes) ... ok
+test_missing_score_is_not_zero_and_reasoning_omits_irrelevant_artifacts (test_v9_delivery.ScoreTests.test_missing_score_is_not_zero_and_reasoning_omits_irrelevant_artifacts) ... ok
+test_threshold_applies_to_science_and_composite_cannot_accept_violation (test_v9_delivery.ScoreTests.test_threshold_applies_to_science_and_composite_cannot_accept_violation) ... ok
+test_actual_pipeline_spawns_executes_reviews_finalizes_and_publishes (test_v9_pipeline.PipelineTests.test_actual_pipeline_spawns_executes_reviews_finalizes_and_publishes) ... ok
+test_code_failure_executes_fresh_repair_node_then_publishes_only_repaired_evidence (test_v9_pipeline.PipelineTests.test_code_failure_executes_fresh_repair_node_then_publishes_only_repaired_evidence) ... ok
+test_critic_protocol_retry_keeps_the_same_solver_output (test_v9_pipeline.PipelineTests.test_critic_protocol_retry_keeps_the_same_solver_output) ... ok
+test_empty_critic_response_stays_unscored_and_does_not_publish (test_v9_pipeline.PipelineTests.test_empty_critic_response_stays_unscored_and_does_not_publish) ... ok
+test_killed_worker_rebuilds_pool_and_repair_really_executes (test_v9_pipeline.PipelineTests.test_killed_worker_rebuilds_pool_and_repair_really_executes) ... ok
+test_missing_file_is_repaired_by_real_execution_not_by_status_promotion (test_v9_pipeline.PipelineTests.test_missing_file_is_repaired_by_real_execution_not_by_status_promotion) ... ok
+test_parameter_drift_and_failed_execution_override_high_science_score (test_v9_pipeline.PipelineTests.test_parameter_drift_and_failed_execution_override_high_science_score) ... ok
+test_persistent_code_failure_stops_at_configured_repair_budget (test_v9_pipeline.PipelineTests.test_persistent_code_failure_stops_at_configured_repair_budget) ... ok
+test_scientific_review_failure_returns_to_search_without_engineering_retry (test_v9_pipeline.PipelineTests.test_scientific_review_failure_returns_to_search_without_engineering_retry) ... ok
+test_permanent_lock_raises_and_preserves_old_json (test_windows_file_lock.WindowsFileLockTests.test_permanent_lock_raises_and_preserves_old_json) ... ok
+test_progress_permission_error_is_nonfatal_but_other_errors_raise (test_windows_file_lock.WindowsFileLockTests.test_progress_permission_error_is_nonfatal_but_other_errors_raise) ... ok
+test_surgical_patch_preserves_other_functions_and_backup (test_windows_file_lock.WindowsFileLockTests.test_surgical_patch_preserves_other_functions_and_backup) ... ok
+test_transient_lock_retried_without_invalidating_old_file (test_windows_file_lock.WindowsFileLockTests.test_transient_lock_retried_without_invalidating_old_file) ... ok
+test_nested_nonzero_exit_and_unicode_directory_are_preserved (test_windows_subprocess_encoding.SubprocessEncodingTests.test_nested_nonzero_exit_and_unicode_directory_are_preserved) ... ok
+test_nested_python_uses_utf8_even_with_legacy_parent_settings (test_windows_subprocess_encoding.SubprocessEncodingTests.test_nested_python_uses_utf8_even_with_legacy_parent_settings) ... ok
+test_unexpected_raw_byte_does_not_crash_outer_reader (test_windows_subprocess_encoding.SubprocessEncodingTests.test_unexpected_raw_byte_does_not_crash_outer_reader) ... ok
+
+----------------------------------------------------------------------
+Ran 113 tests in 65.428s
+
+OK
+Fixed: /tmp/tmpjomcx3lv/utils/live_updates.py
+Backup: /tmp/tmpjomcx3lv/utils/live_updates.py.backup_20261002_124919_754129

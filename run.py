@@ -13,6 +13,7 @@ from core.visualization import generate_vis
 from utils.skill_loader import resolve_skill_roots
 from utils.live_updates import UpdateInbox
 from utils.runtime_timing import RunTimer
+from utils.recovery import ResearchInterrupted
 from utils.hard_parameters import resolve_parameters, bind_contract, parameter_text
 from utils.research_integrity import complete_run, finalize_summary
 from utils.finalizer import FinalizationAgent, write_delivery_index
@@ -83,12 +84,34 @@ def clarify_query(query_path: str, clr_cfg, workflow_enabled: bool = True, confi
     return structured_problem, task_dir, task_name
 
 
-def main(config_path: str = "config.yaml"):
+def main(config_path: str = "config.yaml", resume=False):
     cfg = load_config(config_path)
     pipeline = cfg.get('pipeline', {})
     task_dir = Path(pipeline.get('output_path', 'outputs')) / Path(
         pipeline.get('query_file', 'instructions/test.txt')).stem
-    timing = RunTimer(task_dir)
+    from utils.task_scope import ensure_fresh_run
+    from utils.recovery import RunLock, read_checkpoint, save_checkpoint, freeze_timing, run_locked
+    if run_locked(task_dir): raise ValueError('研究进程仍在运行，不能重复启动')
+    with RunLock(task_dir):
+        return _locked_main(config_path, cfg, task_dir, resume)
+
+
+def _locked_main(config_path, cfg, task_dir, resume):
+    from utils.recovery import read_checkpoint, save_checkpoint, freeze_timing
+    from utils.task_scope import ensure_fresh_run
+    if resume:
+        checkpoint = read_checkpoint(task_dir)
+        if checkpoint['stage']=='done': raise ValueError('任务已经正常结束；请使用追加条件续研')
+        from utils.recovery import validate_evidence
+        if checkpoint.get('supervisor'): validate_evidence(task_dir, checkpoint['supervisor'])
+        freeze_timing(task_dir)
+        cfg['_recovery_checkpoint'] = checkpoint
+    else:
+        ensure_fresh_run(task_dir)
+        save_checkpoint(task_dir, dict(stage='clarifying',contract=None,supervisor=None,result=None,inbox=None))
+    from utils.recovery import new_execution_generation
+    os.environ['PHY_RUN_SESSION']=new_execution_generation(task_dir)
+    timing = RunTimer(task_dir, resume=resume)
     old_root = os.environ.get('PHY_TIMING_ROOT')
     os.environ['PHY_TIMING_ROOT'] = str(task_dir.resolve())
     success = False
@@ -144,13 +167,23 @@ def _run_pipeline(config_path, cfg, timing):
 
     # ---- Stage 1: Clarify the query into a structured contract ----
     timing.change('clarifying')
-    structured_problem, task_dir, task_name = clarify_query(
-        query_path, clarifier_cfg, workflow_enabled=workflow_enabled, config_path=config_path,
-        hard_parameters=hard_parameters,user_inputs=user_inputs,
-    )
+    checkpoint = cfg.get('_recovery_checkpoint') or {}
+    if checkpoint.get('contract'):
+        structured_problem = checkpoint['contract']
+        task_dir = Path(output_root)/Path(query_path).stem
+        task_name = get_task_name(structured_problem)
+        print('[Recovery] 恢复保存的合同与累计条件；跳过初始 Clarifier', flush=True)
+    else:
+        structured_problem, task_dir, task_name = clarify_query(
+            query_path, clarifier_cfg, workflow_enabled=workflow_enabled, config_path=config_path,
+            hard_parameters=hard_parameters,user_inputs=user_inputs,
+        )
     structured_problem['validation_policy'] = {'python_enabled':bool(cfg.get('tools',{}).get('python_enabled',True))}
     from utils.live_updates import atomic_json
     atomic_json(task_dir/'contract.json',structured_problem)
+    if not checkpoint.get('supervisor'):
+        from utils.recovery import save_checkpoint
+        save_checkpoint(task_dir,dict(stage='search',contract=structured_problem,supervisor=None,result=None,inbox=checkpoint.get('inbox')))
     timing.change('initializing')
 
     # ---- Log enabled features ----
@@ -215,13 +248,34 @@ def _run_pipeline(config_path, cfg, timing):
             attach_context(contract, task_dir)
             contract['validation_policy'] = structured_problem['validation_policy']
             return contract
-        inbox = UpdateInbox(task_dir, timing=timing)
+        inbox_recovery=checkpoint.get('inbox')
+        if checkpoint and not inbox_recovery:
+            from utils.research_monitor import safe_read
+            active=safe_read(task_dir/'live_updates'/'active.json') or {}
+            if active.get('session'):inbox_recovery=dict(session=active['session'],seen=[])
+        inbox = UpdateInbox(task_dir, timing=timing, recovery=inbox_recovery)
         supervisor.update_inbox = inbox
         supervisor.rebuild_contract = rebuild_contract
         print(f"[LiveUpdate] Inbox ready for task: {task_dir}")
+    if checkpoint.get('supervisor'):
+        from utils.recovery import restore_supervisor
+        restore_supervisor(supervisor,checkpoint['supervisor'])
+        print(f'[Recovery] 恢复 {len(supervisor.tree.nodes)} 个节点；下一个节点编号 {supervisor.node_id_counter}',flush=True)
+        if inbox:
+            # Receipts can lag a committed checkpoint after an abrupt shutdown.
+            inbox.acknowledge([(name,'') for name in inbox.seen if not (inbox.directory/'acks'/name).exists()],supervisor.live_revision)
+    supervisor.recovering = bool(checkpoint)
+    supervisor.recovery_stage = checkpoint.get('stage','search')
+    if supervisor.recovery_stage=='clarifying': supervisor.recovery_stage='search'
+    supervisor.recovery_result = checkpoint.get('result')
     try:
         timing.change('orchestration')
-        mcts_result = supervisor.run()
+        if checkpoint.get('result') and checkpoint.get('stage') in ('search_finished','finalization','summary','consistency'):
+            mcts_result = dict(checkpoint['result'],trajectory=supervisor._find_best_trajectory(),
+                total_rounds=supervisor.round_counter,total_nodes=len(supervisor.tree.nodes))
+        else:
+            mcts_result = supervisor.run()
+        supervisor.save_recovery(checkpoint.get('stage') if checkpoint.get('result') else 'search_finished',mcts_result)
     finally:
         if inbox is not None:
             inbox.close()
@@ -230,8 +284,11 @@ def _run_pipeline(config_path, cfg, timing):
     timing.change('delivery')
     completion = complete_run(structured_problem,trajectory,task_dir,mcts_result.get('stop_reason','unknown'))
     timing.change('finalization')
-    mcts_result, completion = FinalizationAgent(task_dir,cfg.get('finalization')).run(
-        structured_problem,mcts_result,completion,supervisor)
+    if checkpoint.get('stage') not in ('summary','consistency'):
+        supervisor.save_recovery('finalization',mcts_result)
+        mcts_result, completion = FinalizationAgent(task_dir,cfg.get('finalization')).run(
+            structured_problem,mcts_result,completion,supervisor)
+    supervisor.save_recovery('summary',mcts_result)
     trajectory=mcts_result.get('trajectory',[]) or []
     atomic_json(task_dir/'trajectory.json',trajectory)
     if getattr(supervisor,'logger',None):
@@ -241,12 +298,18 @@ def _run_pipeline(config_path, cfg, timing):
     timing.change('summary')
     summarizer = TrajectorySummarizer(prompts_path="prompts/",config_path=config_path)
     summary_md_path = task_dir / "summary.md"
-    contract_for_summary = json.dumps(dict(structured_problem,completion_report=completion), ensure_ascii=False, indent=2)
+    from utils.final_consistency import adopted_evidence, FinalConsistencyReviewer
+    contract_for_summary = json.dumps(dict(structured_problem, completion_report=completion,
+        adopted_artifact_evidence=adopted_evidence(task_dir, completion)), ensure_ascii=False, indent=2)
     summarizer.write_summary_markdown(
         summary_md_path,
         task_description=contract_for_summary,
         trajectory=trajectory,
     )
+    timing.change('consistency')
+    supervisor.save_recovery('consistency',mcts_result)
+    completion = FinalConsistencyReviewer(config_path=config_path).run(
+        task_dir, structured_problem, completion, trajectory)
     completion = finalize_summary(summary_md_path,completion)
     write_delivery_index(task_dir,completion)
     summary_text = summary_md_path.read_text(encoding="utf-8")
@@ -284,9 +347,16 @@ def _run_pipeline(config_path, cfg, timing):
         print("[Visulization] visualization saved:", vis_path)
     
 
+    supervisor.save_recovery('done',mcts_result)
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='physmaster')
     parser.add_argument('--cfg_file', '-c', type=str, default="config.yaml",
                         help='config file path')
+    parser.add_argument('--resume', action='store_true',help='从同一输出目录的安全断点恢复')
     args = parser.parse_args()
-    main(args.cfg_file)
+    try:
+        main(args.cfg_file,resume=args.resume)
+    except (KeyboardInterrupt, ResearchInterrupted):
+        print('[Recovery] 研究已中断；已完成节点保存在安全断点，可重启服务器后恢复。',flush=True)
+        raise SystemExit(75)

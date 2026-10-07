@@ -17,15 +17,3 @@ inputs/
 
 # Feishu bot config (contains secrets)
 feishu/config.yaml
-
-# Local configuration and runtime files
-/config.yaml
-.env
-.env.*
-!.env.example
-.cache/
-logs/
-*.log
-*.backup_*
-.venv/
-venv/

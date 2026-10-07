@@ -63,7 +63,11 @@ def failure_categories(result, evaluation, tools=None, stage=None):
     if data.get('delivery_status') == 'failed' or data.get('delivery_error'):
         add('Delivery', data.get('delivery_error') or '求解器未交付可核对的结果')
     if ev.get('critic_error'): add('API', ev['critic_error'])
-    if ev.get('score_valid') is False: add('Critic', 'Critic 没有返回有效科学评分；不是科学质量 0 分')
+    if ev.get('score_valid') is False:
+        if ev.get('science_assessable') is False:
+            add('Evidence', ev.get('science_assessment_reason') or '科学证据不足，科学分未评分；不是科学质量 0 分')
+        else:
+            add('Critic', 'Critic 没有返回有效科学评分；不是科学质量 0 分')
     executions = [t.get('execution') or {} for t in tools or [] if t.get('execution')]
     if executions and executions[-1].get('exit_code') not in (None, 0):
         add('Code', '最后一次 Python 执行失败，退出码 ' + str(executions[-1]['exit_code']))

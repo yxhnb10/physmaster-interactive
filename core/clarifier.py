@@ -43,7 +43,7 @@ class Clarifier:
         absolute Path if workflow_dir or workflow_path is configured,
         otherwise None (fallback will use the default LANDAU path)."""
         # parents[2] goes up from core/ to project root
-        project_root = Path(__file__).resolve().parents[2]
+        project_root = Path(__file__).resolve().parents[1]
         configured = (
             config.get("workflow_dir")
             or config.get("workflow_path")
@@ -52,6 +52,7 @@ class Clarifier:
             p = Path(str(configured))
             # support both absolute and relative paths in config
             return p if p.is_absolute() else (project_root / p).resolve()
+        return self._resolve_default_workflow_dir()
         
     def _resolve_default_workflow_dir(self) -> Path:
         project_root = Path(__file__).resolve().parents[1]
@@ -88,7 +89,7 @@ class Clarifier:
     def _parse_workflow_file(self):
         """If workflow_dir points directly to a YAML file, parse it.
         Returns {"path", "goal", "raw"} or None on failure."""
-        if self.workflow_dir.exists() and self.workflow_dir.is_file():
+        if self.workflow_dir is not None and self.workflow_dir.is_file():
             try:
                 raw = self.workflow_dir.read_text(encoding="utf-8")
                 data = yaml.safe_load(raw)
@@ -96,9 +97,7 @@ class Clarifier:
                 return {"path": str(self.workflow_dir), "goal": goal, "raw": raw}
             except Exception:
                 print(f"[Clarifier] Workflow loading failed, loading path: {self.workflow_dir}")
-        else:
-            print(f"[Clarifier] Workflow loading failed, loading path: {self.workflow_dir}")
-            return None
+        return None
 
     def _select_workflow_by_goal(self, user_query: str) -> dict | None:
         """Pick the best-matching workflow YAML by token overlap between
@@ -125,7 +124,7 @@ class Clarifier:
             print(f"[Clarifier] Selected workflow reference {workflow_file['path']}")
             return workflow_file
         
-        default_dir = self._resolve_default_workflow_dir()
+        default_dir = self.workflow_dir or self._resolve_default_workflow_dir()
         if not default_dir.exists():
             print(f"[Clarifier] Workflow search skipped (dir not found): {default_dir}")
             return None
@@ -191,7 +190,8 @@ class Clarifier:
             schema = json.load(f)
 
 
-        system_prompt = SYSTEM_PROMPT
+        from utils.task_scope import RULES
+        system_prompt = SYSTEM_PROMPT+'\n\n'+RULES
 
         user_prompt = USER_PROMPT.format(
             user_query=user_query,
@@ -202,7 +202,7 @@ class Clarifier:
             workflow_hit = self._select_workflow_by_goal(user_query)
             if workflow_hit:
                 user_prompt += (
-                    "\n\nRelevant workflow:\n"
+                    "\n\nRelevant workflow (reference only; not user requirements):\n"
                     f"[file] {workflow_hit['path']}\n"
                     f"[goal] {workflow_hit['goal']}\n"
                     f"{workflow_hit['raw']}"

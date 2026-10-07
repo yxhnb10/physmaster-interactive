@@ -33,6 +33,26 @@ def atomic_json(path, value):
             pass
 
 
+def atomic_text(path, text):
+    """Publish a UTF-8 document without exposing partially written content."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.is_symlink():
+        raise ValueError('Document target cannot be a symbolic link')
+    tmp = path.with_name('.' + path.name + '.' + uuid.uuid4().hex + '.tmp')
+    try:
+        with tmp.open('x', encoding='utf-8') as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        replace_with_retry(tmp, path)
+    finally:
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
 def replace_with_retry(tmp, path):
     """Use bounded retries for transient Windows reader locks, without deleting the old file."""
     for attempt in range(30):
@@ -49,13 +69,17 @@ def replace_with_retry(tmp, path):
 
 
 class UpdateInbox:
-    def __init__(self, task_dir, timing=None):
+    def __init__(self, task_dir, timing=None, recovery=None):
         self.timing = timing
         self.root = Path(task_dir) / 'live_updates'
-        self.session = uuid.uuid4().hex
+        self.session = (recovery or {}).get('session') or uuid.uuid4().hex
+        if len(self.session)!=32 or any(c not in '0123456789abcdef' for c in self.session):
+            raise ValueError('Invalid recovery inbox session')
         self.directory = self.root / self.session
-        self.directory.mkdir(parents=True)
-        self.seen = set()
+        self.directory.mkdir(parents=True, exist_ok=True)
+        self.seen = set((recovery or {}).get("seen", []))
+        for name in self.seen:
+            if Path(name).name != name: raise ValueError("Invalid receipt identity")
         atomic_json(self.root / 'active.json', {'session': self.session, 'status': 'running'})
 
     def pending(self):
@@ -94,7 +118,12 @@ class UpdateInbox:
         previous = self.timing.current if self.timing else None
         while True:
             control = self.root / 'control.json'
-            paused = json.loads(control.read_text(encoding='utf-8')).get('paused', False) if control.exists() else False
+            data = json.loads(control.read_text(encoding='utf-8')) if control.exists() else {}
+            if data.get('stop_requested'):
+                from utils.recovery import ResearchInterrupted
+                self.progress('interrupted', round_index, revision)
+                raise ResearchInterrupted('用户请求在安全边界保存并中断')
+            paused = data.get('paused', False)
             if not paused:
                 if announced and self.timing:
                     self.timing.change(previous)

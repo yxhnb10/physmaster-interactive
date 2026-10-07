@@ -20,14 +20,15 @@ def _publish(path, data):
 
 class RunTimer:
     """One writer, mutually exclusive phases measured with monotonic time."""
-    def __init__(self, task_dir, clock=None, wall_clock=None):
+    def __init__(self, task_dir, clock=None, wall_clock=None, resume=False):
         self.clock = clock or time.monotonic
         self.wall_clock = wall_clock or time.time
         self.path = Path(task_dir) / 'runtime.json'
         self.started = self.clock()
         self.phase_started = self.started
         self.current = 'initializing'
-        self.phases = {}
+        previous = _read(self.path) if resume else {}
+        self.phases = dict(previous.get('phases') or {})
         self.state = 'running'
         self._save()
 

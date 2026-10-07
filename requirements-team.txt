@@ -1,0 +1,2 @@
+# Only needed with --team; existing PhysMaster dependencies remain required.
+cryptography>=42.0

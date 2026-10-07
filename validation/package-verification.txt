@@ -1,0 +1,28 @@
+PASS: full ZIP CRC; upgrade ZIP CRC; real upgrade installer executed on original v9.3 archive.
+PASS: 32 upgraded files verified, 8 obsolete files removed; 141 full-package files byte-match upgraded tree.
+PASS: existing config and historical outputs unchanged; rollback backup exists.
+--- Upgraded tree: actual pipeline tests ---
+test_actual_pipeline_spawns_executes_reviews_finalizes_and_publishes (test_v9_pipeline.PipelineTests.test_actual_pipeline_spawns_executes_reviews_finalizes_and_publishes) ... ok
+test_code_failure_executes_fresh_repair_node_then_publishes_only_repaired_evidence (test_v9_pipeline.PipelineTests.test_code_failure_executes_fresh_repair_node_then_publishes_only_repaired_evidence) ... ok
+test_critic_protocol_retry_keeps_the_same_solver_output (test_v9_pipeline.PipelineTests.test_critic_protocol_retry_keeps_the_same_solver_output) ... ok
+test_empty_critic_response_stays_unscored_and_does_not_publish (test_v9_pipeline.PipelineTests.test_empty_critic_response_stays_unscored_and_does_not_publish) ... ok
+test_killed_worker_rebuilds_pool_and_repair_really_executes (test_v9_pipeline.PipelineTests.test_killed_worker_rebuilds_pool_and_repair_really_executes) ... ok
+test_missing_file_is_repaired_by_real_execution_not_by_status_promotion (test_v9_pipeline.PipelineTests.test_missing_file_is_repaired_by_real_execution_not_by_status_promotion) ... ok
+test_parameter_drift_and_failed_execution_override_high_science_score (test_v9_pipeline.PipelineTests.test_parameter_drift_and_failed_execution_override_high_science_score) ... ok
+test_persistent_code_failure_stops_at_configured_repair_budget (test_v9_pipeline.PipelineTests.test_persistent_code_failure_stops_at_configured_repair_budget) ... ok
+test_scientific_review_failure_returns_to_search_without_engineering_retry (test_v9_pipeline.PipelineTests.test_scientific_review_failure_returns_to_search_without_engineering_retry) ... ok
+
+----------------------------------------------------------------------
+Ran 9 tests in 3.672s
+
+OK
+
+--- Upgraded tree: actual dashboard tests ---
+PASS: actual workspace tabs, keyboard navigation and visibility.
+PASS: five dimensions, actual stage, chain outcome, review retries and lifecycle evidence.
+PASS: stage/status filters and navigable repair links.
+PASS: repair payloads remain escaped text and page has no DOM runtime errors.
+
+PASS: packaged upgrade runs the real repair pipeline and new dashboard.
+
+Release proof added after these checks; tested application code is unchanged.

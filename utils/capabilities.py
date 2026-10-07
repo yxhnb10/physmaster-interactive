@@ -3,6 +3,8 @@
 CAPABILITIES = (
     dict(id='web_search', label='网页搜索 WebSearch', path=('tools', 'web_enabled'), default=False,
          description='调用已配置的网页搜索服务，如 Tavily；需要有效密钥。'),
+    dict(id='web_source', label='来源正文读取', path=('tools', 'source_read_enabled'), default=True,
+         description='通过 Tavily 读取来源正文；同时需要启用 WebSearch，使用个人搜索密钥。'),
     dict(id='arxiv_search', label='arXiv 论文检索', path=('landau', 'library_enabled'), default=True,
          description='独立的联网论文检索；关闭 WebSearch 不会关闭它。'),
     dict(id='codata', label='CODATA 常数查询', path=('tools', 'codata_enabled'), default=True,

@@ -1,0 +1,1 @@
+{"version": "v9.5.2-cloud-translation-2", "source_hash": "e33dcc407aded5d6982de9eeec70759b984ced8ad347364710cb9fdb56b0437a", "text": "公式：T = 2*π*sqrt(L/g)\n运动方程：θ两点 + (g/L) θ = 0 其中 ω = sqrt(g/L)\nL与g之比：0.1019367991845056 s^2\nsqrt(L/g)：0.319275428…", "model": "deepseek-v4-pro"}

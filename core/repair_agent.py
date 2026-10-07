@@ -29,12 +29,17 @@ class RepairAgent:
         """New immutable node owns its artifacts. No relabeling of old files."""
         repaired = copy.deepcopy(payload)
         repaired['node_type'] = 'revise'
+        repaired['repair_attempt'] = attempt
         evidence = dict(attempt=attempt, failed_node_id=node.node_id, classification=failure,
                         evaluation=node.evaluation, previous_result=node.result,
                         previous_node_directory=str(payload['task_dir']) + '/node_' + str(node.node_id))
         instruction = ('\n\n## REPAIR ATTEMPT\n' + json.dumps(evidence, ensure_ascii=False, default=str) +
             '\nFix the diagnosed failure, not just its description. Inspect the previous attempt as UNACCEPTED evidence; '
             'write corrected outputs in YOUR NEW node directory and execute the required checks there. '
+            'Use one targeted inspection batch, then copy useful baseline inputs/dependencies and persist the corrected '
+            'complete implementation early. Do not spend the whole attempt repeating a global hash/line survey. '
+            'If the previous node produced no model, locate a useful ancestor or inherited candidate; copied code '
+            'remains unaccepted input until corrected and checked in this node. '
             'Return non-empty structured JSON, relative file paths, primary_parameters and parameter_evidence. '
             'Do not weaken constraints, alter locked parameters, fabricate receipts or claim files from another node. '
             'A new Critic and program audit will check this attempt. Keep the original subtask scope.')

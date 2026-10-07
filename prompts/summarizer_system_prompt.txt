@@ -13,5 +13,16 @@ Requirements:
   completion_report. A node's claimed filename is not verified delivery.
 - Keep rejected attempts and supplementary changed-constraint cases separate
   from the primary answer. Do not turn a to_revise attempt into a final result.
-- Quote user-locked primary parameters correctly. Do not assert survivability
-  from surface temperature, a 1D stability assumption or solver convergence.
+- Quote user-locked primary parameters correctly. Separate numerical execution,
+  model validity and practical feasibility. Do not claim application-specific
+  safety or performance from an insufficient indicator or solver convergence.
+
+
+v9.5 final-source policy:
+The supplied adopted_artifact_evidence contains hash-checked published files. For
+Final Outcome, prioritize the actual final report and source model over prose from
+earlier nodes. Do not blend different model revisions or call different formulas
+equivalent without evidence. Preserve assumptions, objective/time horizon and the
+difference between a bound, conditional result, simulation and empirical validation.
+If final sources conflict, describe the conflict as unresolved; do not repair it by
+inventing a reconciled model. Truncated evidence is incomplete, not full validation.

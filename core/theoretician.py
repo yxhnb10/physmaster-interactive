@@ -1,3 +1,4 @@
+from utils.run_observer import monitored
 import json
 import os
 from pathlib import Path
@@ -24,6 +25,8 @@ class Theoretician:
         cfg_path = Path(config_path)
         cfg = yaml.safe_load(cfg_path.read_text(encoding='utf-8')) if cfg_path.is_file() else {}
         flags = capability_values(cfg or {})
+        from utils.solver_budget import solver_settings
+        self.solver_budget = solver_settings(cfg or {})
         self.library_enabled = bool(library_enabled) and flags['arxiv_search']
         self.python_enabled = flags['python']
         self.skills_enabled = flags['skills']
@@ -68,6 +71,7 @@ class Theoretician:
         )
 
 
+    @monitored()
     def solve(
         self,
         subtask_description: str,
@@ -88,7 +92,7 @@ class Theoretician:
 
         # Prepend prior knowledge as reference material if available
         if prior_knowledge:
-            prompt = f"## Prior Knowledge (Reference Materials)\n{prior_knowledge}\n\n{prompt}"
+            prompt = f"## Prior Knowledge (Reference Materials; not task requirements or parameter locks)\n{prior_knowledge}\n\n{prompt}"
 
         # For revise nodes: prepend parent's critic feedback so the LLM
         # sees "what went wrong last time" before anything else
@@ -117,7 +121,8 @@ class Theoretician:
             tools += LIBRARY_TOOLS
 
         # Wrap raw tool functions with logging so we can trace tool usage per node
-        system_prompt = self.theoretician_system_prompt
+        from utils.task_scope import RULES
+        system_prompt = self.theoretician_system_prompt+'\n\n'+RULES
         tool_call_log: list = []  # collects {"tool", "args", "result"} for node_log
 
         def _wrap(name, fn):
@@ -157,15 +162,24 @@ class Theoretician:
         if self.library_enabled:
             wrapped_tool_functions["library_search"] = _wrap("library_search", self._library_search)
 
+        from utils.research_web import attach_solver, GUIDANCE
+        attach_solver(tools, wrapped_tool_functions, self.config_path, node_metadata or {}, _wrap)
+        system_prompt += '\n' + GUIDANCE
+
         # Prepend a brief of all available skills so the LLM can decide to load any
         if self.skills_enabled:
             prompt = build_skill_brief_prompt(config_path=self.config_path) + "\n\n" + prompt
 
         node_type_for_role = (node_metadata or {}).get("node_type", "draft")
-        if node_type_for_role == "draft":
-            chosen_model = "deepseek-flash"
-        else:
-            chosen_model = "deepseek-v4-pro"
+        chosen_role = 'draft' if node_type_for_role == 'draft' else 'revise'
+        chosen_model = None  # Role override or the user's default model, resolved by LLMClient.
+
+        from utils.solver_budget import solver_settings, execution_policy, policy_brief
+        policy = execution_policy(getattr(self, 'solver_budget', solver_settings({})),
+                                  node_metadata or {}, self.python_enabled)
+        prompt += policy_brief(policy)
+        print(f"[Theoretician] node_id={(node_metadata or {}).get('node_id', '')} "
+              f"kind={policy['kind']} model_round_budget={policy['model_rounds']}", flush=True)
 
         try:
             response = call_model(
@@ -174,7 +188,9 @@ class Theoretician:
                 tools=tools,
                 tool_functions=wrapped_tool_functions,
                 model_name=chosen_model,
-                max_tool_calls=8,
+                role=chosen_role,
+                max_tool_calls=policy['model_rounds'],
+                interaction_policy=policy,
                 config_path=self.config_path,
             )
         except Exception as exc:
@@ -224,6 +240,9 @@ def run_theo_node(payload: Dict[str, Any],config_path:str = 'config.yaml') -> Di
                        + "do not treat earlier results as verified under changed assumptions.\n"
                        + "Generate files only in current_node_dir. Return node-relative file and "
                        + "parameter_evidence paths. Final archive paths are handled by the program.\n"
+                       + "Historical feedback must not override this artifact_scope: a node_N directory "
+                       + "is the required working location. Do not add a self-check that rejects the "
+                       + "current node directory or write directly to archive_dir to satisfy old feedback.\n"
                        + "## Current subtask\n" + description)
 
         node_metadata = {
@@ -233,7 +252,11 @@ def run_theo_node(payload: Dict[str, Any],config_path:str = 'config.yaml') -> Di
             "node_type": payload["node_type"],
             "task_dir": task_dir,
             "output_dir": node_output_dir,
+            "repair_attempt": payload.get('repair_attempt', 0),
+            "requires_execution": payload["subtask"].get('subtask_type') == 'coding',
         }
+        from utils.node_delivery import required_file_names
+        node_metadata['required_files'] = required_file_names(payload['subtask'].get('expected_output'))
 
         result, tool_call_log = theoretician.solve(
             subtask_description=description,

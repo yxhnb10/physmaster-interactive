@@ -15,3 +15,6 @@ Output requirements:
 - Structure as: [Strategy] [Key Methods] [Pitfalls] [Reusable Results]
 - Do not include code, traceback, or step-by-step algebra.
 - Focus on transferable knowledge, not task-specific details.
+- Retain applicability, assumptions and evidence status of reusable results.
+- Historical numeric values, filenames and task-specific constraints are examples,
+  never defaults or requirements for a new task.

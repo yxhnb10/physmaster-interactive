@@ -1,0 +1,20 @@
+{
+  "member2": {
+    "username": "member2",
+    "admin": false,
+    "password": {
+      "salt": "dffb914e6fd5d455125c738fdc3acdbc",
+      "hash": "82b3a1a271a22c4ccf8c74a2cd6c725f9e81662d242e6861031a01a647768a94"
+    },
+    "profile": null
+  },
+  "yanxiaohai": {
+    "username": "yanxiaohai",
+    "admin": true,
+    "password": {
+      "salt": "fa048fb9107da27526a25ae60ffa4cd1",
+      "hash": "36a2e2bae4fe5155d4fdfcb69333e1db18c9c6e0dcfb11ee086a740e2639fc3a"
+    },
+    "profile": "gAAAAABqwchIXTgOjpzy_9szGXVj1NLGRSap2owf1Ck4MH6vpIj726DJrUg-aKWiIOnD4vwHKi_6YN6vRO9Bk9GGLBlm23VT47NWU61qNofpXC1F-nQUK_fqVE7FOMd6NRLpUxVf77iuol7jeKQFYt9wCfjB8QMs1hEYDcB_ug5LT7T4xdmUgzhbokOD3OLv-FvmjbveCNXhFxRuLw5LScu3cwA-8Gt7BIMlKwpc4a_fXRPtTPU5BzVmhZEkDeh3A7bdhkX1yqqSDCz1DHSfK-Y5SxisH2npvhPi3RXtU0UmwgjROZCA7vUDidYMF-SXDIxVaD9yf_pJEUsoZAxlynIBebQOlnN2XvnsmoJBvxQu74IXzwjhO8JWRU2_oexSvvtWOaWDflp10CF0CCUoROdvEHlGR-zQe_R5V-E2MbKjUrnz6xnywmAgeCIUWeY3_7WiaX3F55Pbsh7Bm0ZgQqhgUnDSuwfan5j6MVqlBSP_a3-AeHDKZblNmWqANHy-MEdFV9AmyoCkAvpY3nScGrcwGsGP_R0F03DLsA3Byc_RkTcjxG2GuyRZJW9mPxX6QpsI2nehtJwespR8L9R1Cto_V15TTWzr5y87Avk870MvE_ejry0v556zjotkmk8JqiTEAgZ8Upb-dqvLEYv5OK152V2nUzQ0IIuVBXHImyEFCKyR7kl4uWoKWWFhe3uM57y001wIw8Egas3ZMkcQ-yyR6oZRgY4eK_tWayveGhJQm5EWdmdtVjST2uOq2Jtw9ASkzR9WkOAENGIrxmPd8vCDmC5XpnQJdm9eTKpqXIrgZW0Yf1Va4iwc7GGH9cUiqkUktCAILRaSWDibXtJDbYTlzis3Ktxntw=="
+  }
+}

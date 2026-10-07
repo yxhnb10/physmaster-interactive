@@ -18,3 +18,6 @@ Output requirements:
 - Treat any non-complete evaluation or failed integrity audit as unaccepted.
   Preserve its unresolved issues and changed-constraint labels in memory.
   Never distill an unaccepted attempt into a verified physical fact.
+
+- Preserve scope and applicability; task-specific numbers and artifact names
+  are not default conditions for later tasks.

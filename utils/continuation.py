@@ -12,16 +12,22 @@ import uuid
 from pathlib import Path, PurePosixPath
 from utils.live_updates import atomic_json
 
-POLICY = ('INCREMENTAL CONTINUATION: preserve all original requirements and amendments. '
-    'Use inherited code/data/validation as the baseline; plan only new work and affected '
+POLICY = ('INCREMENTAL CONTINUATION: preserve applicable original requirements and amendments; '
+    'explicit later user changes supersede changed conditions only. This policy is task-independent; '
+    'do not assume any particular domain, parameter, filename, code language or report format. '
+    'Use relevant inherited reasoning, sources, code, data and validation as the baseline; plan new work and affected '
     'checks. Do not repeat unaffected exploration/model construction. First inspect the '
-    'inherited inventory and relevant original contracts/reviews. Explain reuse vs changes. '
+    'inherited inventory and relevant original contracts/reviews in one targeted inspection; '
+    'avoid repeated inspection of unrelated files. Explain reuse vs changes. '
     'Historical acceptance applies only to historical conditions; failures stay failures. '
     'Use read_inherited_file to inspect inputs and reuse_inherited_file to copy unchanged '
     'code/data plus dependencies into this node. Declare reused_files with file_id, '
     'unchanged_reason and impact_checked=true when claiming unchanged results. '
     'Generate outputs only in current_node_dir. Never edit inherited snapshots or originals. '
-    'New/affected results must pass normal execution, parameter, artifact and Critic checks. '
+    'Python __pycache__, .pyc and .pyo files are regenerable runtime caches, not inherited '
+    'research artifacts; ignore legacy cache entries and reuse the source instead. '
+    'New/affected results must pass the applicable execution, parameter, artifact and Critic checks. '
+    'Reasoning and literature tasks need not invent code/files; use only current-scope deliverables. '
     'A snapshot is not experimental validation or restoration of process memory.')
 
 
@@ -40,6 +46,18 @@ def file_hash(path):
     return h.hexdigest()
 
 
+def is_runtime_cache(relative):
+    """Only Python bytecode caches; never omit arbitrary logs/data/temp files."""
+    path=PurePosixPath(str(relative).replace('\\', '/'))
+    return any(part.casefold()=='__pycache__' for part in path.parts) or path.suffix.casefold() in ('.pyc','.pyo')
+
+
+def research_records(manifest):
+    # Legacy manifests remain untouched. Filter before file access/hash checking,
+    # since a cache may have changed or been deleted since the old snapshot.
+    return [r for r in manifest.get('files',[]) if not is_runtime_cache(r.get('source_path',''))]
+
+
 def safe_path(root, relative):
     root = Path(root).resolve()
     p = PurePosixPath(relative)
@@ -54,7 +72,7 @@ def safe_path(root, relative):
 
 
 def snapshot_research(parent_dir, child_dir, source_id, conditions):
-    """Copy every regular research file, flattening earlier generations once.
+    """Copy research files except Python caches, flattening older generations.
 
     Credentials/configuration outside query/ are intentionally not research
     outputs. Broken/changed historical files remain visible as unverified.
@@ -68,6 +86,7 @@ def snapshot_research(parent_dir, child_dir, source_id, conditions):
     prior = read_json(parent / 'inheritance.json', {}) or {}
     existing = read_json(child / 'inheritance.json', {}) or {}
     records, sources = [], []
+    exclusions=dict(legacy_cache_records=0,cache_directories=0,cache_files=0)
     try:
         # Earlier sources remain accessible after original tasks are moved/deleted.
         known = set()
@@ -75,6 +94,9 @@ def snapshot_research(parent_dir, child_dir, source_id, conditions):
             for source in context.get('sources', []):
                 if source['task_id'] not in {s['task_id'] for s in sources}: sources.append(source)
             for old in context.get('files', []):
+                if is_runtime_cache(old.get('source_path','')):
+                    exclusions['legacy_cache_records']+=1
+                    continue
                 if old['file_id'] in known: continue
                 src = safe_path(context_root, old['snapshot_path'])
                 dst = safe_path(staging, old['snapshot_path'].removeprefix('inherited/'))
@@ -95,13 +117,19 @@ def snapshot_research(parent_dir, child_dir, source_id, conditions):
                     receipts[row[key]] = dict(row, node_accepted=row.get('status') == 'available')
         # A full snapshot includes failed nodes, logs, empty files and receipts.
         for directory, dirs, files in os.walk(parent, followlinks=False):
-            dirs[:] = sorted(d for d in dirs if not (Path(directory) == parent and d == 'inherited'))
+            exclusions['cache_directories']+=sum(d.casefold()=='__pycache__' for d in dirs)
+            dirs[:] = sorted(d for d in dirs if d.casefold()!='__pycache__'
+                and not (Path(directory) == parent and d == 'inherited'))
             for name in dirs + sorted(files):
+                if is_runtime_cache((Path(directory)/name).relative_to(parent).as_posix()):continue
                 if (Path(directory) / name).is_symlink():
                     raise ValueError('Cannot snapshot linked research output: ' + name)
             for name in sorted(files):
                 src = Path(directory) / name
                 relative = src.relative_to(parent).as_posix()
+                if is_runtime_cache(relative):
+                    exclusions['cache_files']+=1
+                    continue
                 dst = staging / source_id / relative
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(src, dst)
@@ -134,9 +162,14 @@ def snapshot_research(parent_dir, child_dir, source_id, conditions):
                 source_task_id=source_id, source_path=relative,
                 snapshot_path='inherited/'+source_id+'/'+relative, bytes=dst.stat().st_size,
                 sha256=digest, historical_status='unverified', kind=src.suffix.lstrip('.')))
+        completion=read_json(parent / 'completion.json', {}) or {}
+        final_review=completion.get('final_consistency') or {}
         sources.append(dict(task_id=source_id, original_dir=str(parent),
                             contract=read_json(parent / 'contract.json', {}),
-                            outcome=(read_json(parent / 'completion.json', {}) or {}).get('status', 'unknown')))
+                            outcome=completion.get('status', 'unknown'),
+                            final_review={key:final_review.get(key) for key in
+                                ('status','claim_scope','next_actions','assumptions','limitations')}
+                                if final_review else None))
         destination = child / 'inherited'
         if destination.exists():
             # Before launch only: combine legacy v9.3 ancestors into one flat snapshot.
@@ -149,9 +182,14 @@ def snapshot_research(parent_dir, child_dir, source_id, conditions):
             shutil.rmtree(retired)
         else:
             os.replace(staging, destination)
-        value = dict(schema_version=1, mode='incremental', created_at=time.time(),
+        parent_meta=read_json(parent.parent/'task.json',{}) or {}
+        parent_contract=read_json(parent/'contract.json',{}) or {}
+        inputs=parent_contract.get('authoritative_user_inputs') or []
+        original=parent_meta.get('original_query') or prior.get('original_query') or (inputs[0] if inputs else '')
+        value = dict(schema_version=1, mode='incremental', created_at=time.time(),original_query=original,
             parent_task_id=source_id, conditions=list(conditions), sources=sources, files=records,
-            note='Full historical snapshots; acceptance must be checked against current conditions.')
+            runtime_cache_exclusions=exclusions,
+            note='Historical research snapshots exclude regenerable Python bytecode caches; acceptance must be checked against current conditions.')
         atomic_json(child / 'inheritance.json', value)
         (child / 'inherited_index.md').write_text(inventory_text(child, value), encoding='utf-8')
         return value
@@ -165,7 +203,7 @@ def inventory_text(task_dir, manifest=None):
     lines = ['# Inherited research inventory', '', POLICY, '',
         '| file_id | source task | original path | historical status | SHA-256 |',
         '| --- | --- | --- | --- | --- |']
-    for row in value.get('files', []):
+    for row in research_records(value):
         lines.append('| ' + ' | '.join(str(row[k]).replace('|', '\\|')
             for k in ('file_id', 'source_task_id', 'source_path', 'historical_status', 'sha256')) + ' |')
     return '\n'.join(lines) + '\n'
@@ -177,7 +215,7 @@ def attach_context(contract, task_dir):
     value = read_json(root / 'inheritance.json', {}) or {}
     if not value:
         return contract
-    rows = value.get('files', [])
+    rows = research_records(value)
     # Entire inventory is on disk/tools. A small priority list avoids context bloat.
     priority = sorted(rows, key=lambda r: (r['historical_status'] != 'accepted',
         r['kind'] not in ('py', 'csv', 'json'), r['source_task_id'] != value['parent_task_id'], r['source_path']))
@@ -185,6 +223,10 @@ def attach_context(contract, task_dir):
         source_task_ids=[s['task_id'] for s in value['sources']], file_count=len(rows),
         manifest_path=str(root / 'inheritance.json'), inventory_path=str(root / 'inherited_index.md'),
         inherited_root=str(root / 'inherited'), policy=POLICY, priority_files=priority[:24],
+        historical_final_reviews=[dict(task_id=s['task_id'], **s['final_review'])
+            for s in value['sources'] if isinstance(s.get('final_review'),dict)],
+        final_review_policy='Unresolved historical consistency issues are diagnostics, not new user requirements. '
+            'Check their applicability under current conditions; target affected work and do not reuse disputed conclusions as verified.',
         tools=['list_inherited_files', 'read_inherited_file', 'reuse_inherited_file'])
     if not isinstance(contract.get('continuation_plan'), dict):
         contract['continuation_plan'] = dict(mode='incremental', status='scope_to_be_checked',
@@ -203,8 +245,11 @@ def planning_brief(task_dir):
     value = read_json(Path(task_dir) / 'inheritance.json', {}) or {}
     if not value:
         return ''
-    accepted = [r for r in value['files'] if r['historical_status'] == 'accepted']
-    brief = dict(parent_task_id=value['parent_task_id'], file_count=len(value['files']),
+    rows=research_records(value)
+    accepted = [r for r in rows if r['historical_status'] == 'accepted']
+    brief = dict(parent_task_id=value['parent_task_id'], file_count=len(rows),
+        historical_final_reviews=[dict(task_id=s['task_id'], **s['final_review'])
+            for s in value['sources'] if isinstance(s.get('final_review'),dict)],
         accepted_baselines=[{k: r[k] for k in ('file_id', 'source_path', 'kind')} for r in accepted[:40]],
         historical_tasks=[dict(task_id=s['task_id'], outcome=s['outcome'],
             subtasks=(s.get('contract') or {}).get('subtasks', [])) for s in value['sources'][-1:]])
@@ -217,6 +262,8 @@ def get_record(task_dir, file_id):
     row = next((r for r in value.get('files', []) if r['file_id'] == file_id), None)
     if row is None:
         raise ValueError('Unknown inherited file_id')
+    if is_runtime_cache(row.get('source_path','')):
+        raise ValueError('Python bytecode cache is not an inherited research input; reuse its source file instead.')
     path = safe_path(root, row['snapshot_path'])
     if not path.is_file() or file_hash(path) != row['sha256']:
         raise ValueError('Inherited file missing or changed: ' + row['source_path'])
@@ -232,7 +279,7 @@ def record_usage(node_dir, events):
 
 def list_files(task_dir, query='', offset=0, limit=50):
     value = read_json(Path(task_dir) / 'inheritance.json', {}) or {}
-    rows = [r for r in value.get('files', []) if str(query).lower() in r['source_path'].lower()]
+    rows = [r for r in research_records(value) if str(query).lower() in r['source_path'].lower()]
     offset, limit = max(0, int(offset)), min(100, max(1, int(limit)))
     return dict(total=len(rows), offset=offset, files=rows[offset:offset + limit],
                 next_offset=offset + limit if offset + limit < len(rows) else None)
@@ -263,7 +310,7 @@ def reuse_file(task_dir, node_dir, file_id, with_dependencies=True):
     row, path = get_record(task_dir, file_id)
     value = read_json(Path(task_dir) / 'inheritance.json', {})
     prefix = PurePosixPath(row['source_path']).parent
-    bundle = ([r for r in value['files'] if r['source_task_id'] == row['source_task_id']
+    bundle = ([r for r in research_records(value) if r['source_task_id'] == row['source_task_id']
         and (PurePosixPath(r['source_path']).is_relative_to(prefix) if prefix != PurePosixPath('.')
              else PurePosixPath(r['source_path']).parent == prefix)] if with_dependencies else [row])
     # Copy sibling inputs together; do not copy receipts over current-node logs.
@@ -294,7 +341,7 @@ def reuse_file(task_dir, node_dir, file_id, with_dependencies=True):
 def baseline_previews(task_dir, node_dir):
     """Deliver a bounded source preview even if the solver never searches files."""
     value = read_json(Path(task_dir) / 'inheritance.json', {}) or {}
-    rows = [r for r in value.get('files', []) if r['historical_status'] == 'accepted' and r['kind'] == 'py']
+    rows = [r for r in research_records(value) if r['historical_status'] == 'accepted' and r['kind'] == 'py']
     rows.sort(key=lambda r: (r['source_task_id'] != value.get('parent_task_id'),
                              not r['source_path'].startswith('node_'), r['source_path']))
     seen, blocks, events = set(), [], []
@@ -333,9 +380,15 @@ def finish_reuse(task_dir, node_dir, result):
 def inheritance_view(task_dir, offset=0, limit=50, query=''):
     root = Path(task_dir)
     value = read_json(root / 'inheritance.json', {}) or {}
+    rows=research_records(value)
+    available_ids={r['file_id'] for r in rows}
+    contract=read_json(root/'contract.json',{}) or {}
+    inputs=contract.get('authoritative_user_inputs')
+    current_inputs=inputs if isinstance(inputs,list) and inputs and all(isinstance(x,str) for x in inputs) else None
     usage = []
     for path in sorted(root.glob('node_*/inheritance_usage.json')):
         for event in (read_json(path, {}) or {}).get('events', []):
+            if event.get('file_id') not in available_ids:continue
             usage.append(dict(event, node_id=path.parent.name))
     inventory = list_files(root, query, offset, limit)
     by_id = {}
@@ -358,13 +411,16 @@ def inheritance_view(task_dir, offset=0, limit=50, query=''):
     for row in inventory['files']:
         row['usage'] = by_id.get(row['file_id'], [])
     return dict(inventory, inherited=bool(value), mode=value.get('mode'),
-        parent_task_id=value.get('parent_task_id'), sources=[dict(task_id=s['task_id'], outcome=s['outcome'])
-        for s in value.get('sources', [])], conditions=value.get('conditions', []),
-        file_count=len(value.get('files', [])), read_count=len({e['file_id'] for e in usage if e['action'] == 'read'}),
+        parent_task_id=value.get('parent_task_id'), policy=POLICY,
+        original_query=current_inputs[0] if current_inputs else value.get('original_query',''),
+        sources=[dict(task_id=s['task_id'], outcome=s['outcome'])
+        for s in value.get('sources', [])], conditions=current_inputs[1:] if current_inputs else value.get('conditions', []),
+        file_count=len(rows), ignored_runtime_cache_count=len(value.get('files',[]))-len(rows),
+        read_count=len({e['file_id'] for e in usage if e['action'] == 'read'}),
         copied_count=len({e['file_id'] for e in usage if e['action'] == 'copied'}),
         context_count=len({e['file_id'] for e in usage if e['action'] == 'context_attached'}),
         unchanged_count=len({e['file_id'] for e in usage if e['action'] == 'unchanged_declared'}),
-        plan=(read_json(root / 'contract.json', {}) or {}).get('continuation_plan'),
+        plan=contract.get('continuation_plan'),
         note='Tool reads and copy receipts are recorded; arbitrary Python filesystem reads are not inferred.')
 
 

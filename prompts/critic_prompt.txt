@@ -21,13 +21,31 @@ Calibration guidance:
 - `{redraft_threshold} <= reward < {accept_threshold}`: not eligible for complete; revise unless the approach requires redraft.
 - `reward < {redraft_threshold}`: major issues; redraft.
 - A high score alone is insufficient: preserve to_revise/to_redraft if unresolved issues remain.
+- Explicitly return science_assessable (boolean) and science_assessment_reason.
+  If the node only inspected prior files or returned an unexecuted plan and no
+  scientific content can be assessed, set science_assessable=false and reward=null.
+  Do not assign a scientific zero solely for missing outputs or execution.
+  Real assessable scientific errors may receive reward=0 with science_assessable=true.
+- observed_file_evidence.current_node covers declared files, not the entire disk.
+  Consult current_node_disk_inventory and undeclared_current_files before asserting
+  absence. Disk presence does not prove declaration, execution, revision or acceptance.
+- Current Python execution receipts and code/output excerpts are supplied separately.
+  Inspect their actual purpose: successful hashing is not a model run. Prior repair
+  diagnostics describe failed ancestors; do not apply their old NOT PERFORMED status
+  to a new node that has actual current execution evidence.
+- Evaluate substantive requirements, not one preferred implementation style.
+  Consistent reporting/sweep settings may use any verifiable equivalent design;
+  do not require a particular variable name unless the authoritative
+  contract explicitly requires it. Historical Critic feedback is not a new contract.
 
 Output requirements:
 Return a JSON object with the following keys:
 - decision: one of ["to_revise", "to_redraft", "complete"]
 - opinion: brief, bullet-like diagnostics of errors, assumptions, or key issues
-- reward: a float between 0 and 1 (higher is better)
+- reward: a float between 0 and 1, or null if science_assessable=false
 - analysis: a short analysis of current progress and what the next node should focus on (2–5 sentences)
 - core_results: a list of key numerical results, formulas, or intermediate values (may be empty)
 - code: short code snippets or commands relevant for continuation (string or array)
 - blocking_issues: array of remaining material objections; [] only when none remain
+- science_assessable: boolean; false only when scientific content cannot be assessed
+- science_assessment_reason: concise basis for the assessment or why it is unassessable

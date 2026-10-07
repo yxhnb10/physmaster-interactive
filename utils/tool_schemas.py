@@ -123,34 +123,7 @@ PRIOR_SEARCH_TOOL = {
     },
 }
 
-WEB_SEARCH_TOOL = {
-    "type": "function",
-    "function": {
-        "name": "web_search",
-        "description": (
-            "Search the general web for physics references, definitions, "
-            "constants, or standard results. Use this when you need "
-            "information beyond arXiv (e.g., Wikipedia, NIST, Physics "
-            "Stack Exchange). Prefer `library_search` for research papers. "
-            "Returns snippets with URLs."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "Short English search query using technical terms."
-                },
-                "top_k": {
-                    "type": "integer",
-                    "description": "Number of results.",
-                    "default": 3
-                },
-            },
-            "required": ["query"],
-        },
-    },
-}
+WEB_SEARCH_TOOL = {'type': 'function', 'function': {'name': 'web_search', 'description': 'Search public web sources for the current research question, including empirical data, documented model limits and literature. Prefer relevant primary sources. arXiv search is an alternative for papers, not a mandatory prerequisite. Returns snippets and URLs; use read_web_source to verify important source text.', 'parameters': {'type': 'object', 'properties': {'query': {'type': 'string', 'description': 'Concise query with relevant subject and technical terms; use the language appropriate to the sources.'}, 'top_k': {'type': 'integer', 'description': 'Number of results.', 'default': 3}}, 'required': ['query']}}}
 
 
 CODATA_TOOL = {

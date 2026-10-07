@@ -11,7 +11,10 @@ Additional runtime constraints:
 - Do not include planning/workflow design as a subtask.
 - `task_description` and relevant `subtasks[*].description` must explicitly retain user-specified methods (e.g., formulas/models, `gvar.load`, key patterns, shapes, path rules, output checks).
 - Set each subtask research_stage to EXPLORATION, MODEL_BUILDING, SIMULATION, VALIDATION or FINALIZATION.
-- Each subtask expected_output lists only files/results due in THAT subtask. Put final PDFs in the report subtask; keep ALL required deliverables in the top-level expected_output. Do not copy the global output list into every subtask.
+- Each subtask expected_output lists only files/results due in THAT subtask. Put requested final reports in the report subtask; keep ALL required deliverables in the top-level expected_output.
+- Do not invent files for answer-only tasks; expected_output may be []. A report
+  is not automatically a PDF. Methods and criteria in workflow references are
+  optional guidance unless requested by the user or justified for this task. Do not copy the global output list into every subtask.
 - Before output, verify no required method detail was dropped.
 - Do not output schema/template metadata keys like `$schema`, `$id`, `properties`, `required`, or `definitions`.
 

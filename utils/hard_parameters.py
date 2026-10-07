@@ -4,7 +4,7 @@ import re
 
 NUMBER = r'[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?'
 ALIASES = {'total_mass': ['total_mass', 'total_mass_kg', 'mass', 'mass_kg', 'm', 'm_total', 'MASS', 'TOTAL_MASS']}
-MASS_NAMES = {'total_mass', 'total_mass_kg', 'mass', 'mass_kg', '总质量'}
+MASS_NAMES = {'total_mass', 'total_mass_kg', '总质量'}
 UNITS = {'kg': ('mass', 1), 'g': ('mass', .001), '千克': ('mass', 1),
          '公斤': ('mass', 1), '克': ('mass', .001), 'm': ('length', 1),
          'km': ('length', 1000), 'cm': ('length', .01), 's': ('time', 1),
@@ -31,10 +31,10 @@ def normalize_parameters(items):
         name = 'total_mass' if name in MASS_NAMES else name
         record = dict(name=name, value=float(value), unit=unit,
                       aliases=ALIASES.get(name, [name]), source=str(item.get('source', 'user'))[:500])
-        if name == 'total_mass' and value <= 0:
-            raise ValueError('总质量必须大于零')
-        if name == 'total_mass' and unit not in ('kg', 'g', '千克', '公斤', '克'):
-            raise ValueError('总质量需注明 kg 或 g 等质量单位')
+        if name in ('total_mass', 'mass', 'mass_kg') and value <= 0:
+            raise ValueError('质量必须大于零')
+        if name in ('total_mass', 'mass', 'mass_kg') and unit not in ('kg', 'g', '千克', '公斤', '克'):
+            raise ValueError('质量需注明 kg 或 g 等质量单位')
         if any(p['name'] == name for p in result):
             raise ValueError('硬性参数名称重复：' + name)
         result.append(record)
@@ -51,7 +51,7 @@ def parse_parameter_text(text):
             continue
         match = re.fullmatch(r'([A-Za-z_][A-Za-z0-9_]*|[\u4e00-\u9fff]+)\s*[=：:]\s*(' + NUMBER + r')\s*([\w/°²³^.*-]*)', line)
         if not match:
-            raise ValueError('硬性参数每行应为 名称 = 数值 单位，例如 total_mass = 190 kg')
+            raise ValueError('硬性参数每行应为 名称 = 数值 单位；无量纲参数可以省略单位')
         items.append(dict(name=match[1], value=float(match[2]), unit=match[3], source='user parameter field'))
     return normalize_parameters(items)
 
@@ -78,7 +78,7 @@ def same_value(expected, actual):
 
 def discover_mass(text, existing=False):
     # Narrow recognition, never let generated summaries or model prose set locks.
-    patterns = [r'(?:total\s+mass|system\s+mass|总质量)[^\n.;。；]{0,140}?(' + NUMBER + r')\s*(kg|千克|公斤)',
+    patterns = [r'(?:total[_\s]+mass|system[_\s]+mass|总质量)[^\n.;。；]{0,140}?(' + NUMBER + r')\s*(kg|千克|公斤)',
                 r'(' + NUMBER + r')\s*(kg)\s+(?:skydiver|跳伞者)[^\n]{0,100}?(?:system|系统)']
     if existing:
         patterns.append(r'(?:质量|mass)\s*(?:改为|改成|调整为|=|:|to|is)\s*(' + NUMBER + r')\s*(kg|千克|公斤)')
@@ -100,18 +100,33 @@ def resolve_parameters(user_inputs, manual_text=None, configured=None):
     manual=parse_parameter_text(manual_text) if manual_text is not None else []
     manual_mass=next((p for p in manual if p['name']=='total_mass'),None)
     params = {p['name']: p for p in normalize_parameters(configured or [])}
-    discovered = None
+    # Seed explicit field names before reading user amendments. Ordinary mass,
+    # mass_kg and m are not aliases for a whole system's total_mass.
+    for item in manual:params[item['name']]=item
+    discovered = {}
     for text in user_inputs:
-        try:discovered = discover_mass(text, 'total_mass' in params) or discovered
+        try:mass = discover_mass(text, 'total_mass' in params)
         except ValueError:
             if manual_mass is None:raise
-            discovered=manual_mass
-        if discovered:
-            params['total_mass'] = discovered
+            mass=manual_mass
+        if mass:
+            discovered['total_mass']=mass
+            params['total_mass']=mass
+        for name,item in list(params.items()):
+            if name=='total_mass':continue  # Retain conservative natural-language mass recognition.
+            pattern=(r'(?<![\w])'+re.escape(name)+r'\s*(?:=|:|：|改为|改成|调整为|设为|设置为|to\b|is\b)\s*('
+                     +NUMBER+r')\s*([\w/°²³^.*-]*)')
+            hits=list(re.finditer(pattern,text))  # Scientific names are case-sensitive (A != a).
+            if not hits:continue
+            updates=[normalize_parameters([dict(name=name,value=float(h[1]),unit=h[2].rstrip('.') or item['unit'],
+                source='explicit user parameter assignment')])[0] for h in hits]
+            if any(not same_value(updates[0],u) for u in updates[1:]):
+                raise ValueError('同一条用户输入含多个 '+name+' 值；请明确主情景参数')
+            discovered[name]=updates[-1];params[name]=updates[-1]
     if manual_text is not None:
         for p in manual:
-            if p['name'] == 'total_mass' and discovered and not same_value(discovered, p):
-                raise ValueError('硬性参数栏的总质量与用户问题／最新追加条件冲突，请统一后提交')
+            if p['name'] in discovered and not same_value(discovered[p['name']], p):
+                raise ValueError('硬性参数栏的 '+p['name']+' 与用户问题／最新追加条件冲突，请统一后提交')
             params[p['name']] = p
     return list(params.values())
 
@@ -152,6 +167,8 @@ def bind_contract(contract, params, user_inputs, task_dir):
     contract['hard_parameters'] = normalize_parameters(params)
     contract['authoritative_user_inputs'] = list(user_inputs)
     contract['current_task_dir'] = str(task_dir.resolve())
+    from utils.task_scope import bind_scope
+    bind_scope(contract, task_dir)
     # Expected filenames are scoped to this run, never an inherited absolute path.
     from utils.research_integrity import expected_artifacts
     contract['expected_output'] = expected_artifacts(contract, task_dir)
@@ -162,5 +179,6 @@ def bind_contract(contract, params, user_inputs, task_dir):
             ids=[int(s.get('id',i)) for i,s in enumerate(subtasks,1) if isinstance(s,dict)]
             subtasks.append(dict(id=max(ids,default=0)+1,subtask_type='analysis',
                 description='Final analysis and actual report delivery: review assumptions, constraint compliance, uncertainty and numerical validation; generate the required PDF report in this node directory. Do not merely promise files. Prior unsupported conclusions remain provisional.',
-                input='Accepted artifacts from the current branch.',expected_output=', '.join(s['path'] for s in specs)))
+                research_stage='FINALIZATION',input='Accepted artifacts from the current branch.',
+                expected_output=', '.join(s['path'] for s in specs if s['path'].lower().endswith('.pdf'))))
     return contract
